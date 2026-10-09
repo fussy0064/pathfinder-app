@@ -40,6 +40,8 @@ PF_API const char* pf_status_message(int status);
 PF_API pf_engine* pf_engine_open(const char* graph_path, int* status);
 PF_API void pf_engine_close(pf_engine* engine);
 PF_API uint32_t pf_engine_node_count(const pf_engine* engine);
+/* 1 if a valid Contraction Hierarchies file "<graph_path>.ch" was found and is used (fast routing). */
+PF_API int pf_engine_uses_ch(const pf_engine* engine);
 
 /* Finds the fastest route. Returns PF_OK or an error code. */
 PF_API int pf_route_find(pf_engine* engine, double start_lat, double start_lon,

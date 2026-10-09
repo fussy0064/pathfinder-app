@@ -1,8 +1,12 @@
 build/
+build-*/
 *.bin
 *.pbf
 *.mbtiles
+*.tmp
 .env
 *.key
 *.jks
 local.properties
+__pycache__/
+*.pyc

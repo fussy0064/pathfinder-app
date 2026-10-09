@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -O3 -DNDEBUG -fsanitize=address,undefined -shared -Wl,-soname,libpathfinder.so -o libpathfinder.so CMakeFiles/pathfinder.dir/core/src/engine.cpp.o CMakeFiles/pathfinder.dir/core/src/nav.cpp.o CMakeFiles/pathfinder.dir/core/src/c_api.cpp.o 

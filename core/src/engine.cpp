@@ -34,29 +34,41 @@ double snap_dist_m(int32_t lat1, int32_t lon1, int32_t lat2, int32_t lon2) {
   return std::sqrt(dx * dx + dy * dy);
 }
 
+// ---------------- file mapping ----------------
+void* map_file(const std::string& path, size_t& size, std::string& err) {
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+  err = "big-endian CPU not supported";
+  return nullptr;
+#endif
+  int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+  if (fd < 0) { err = "cannot open file"; return nullptr; }
+  struct stat st;
+  if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size <= 0) {
+    ::close(fd); err = "not a regular file"; return nullptr;
+  }
+  size = static_cast<size_t>(st.st_size);
+  void* p = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
+  ::close(fd);
+  if (p == MAP_FAILED) { err = "mmap failed"; return nullptr; }
+  return p;
+}
+
+void unmap_file(void* data, size_t size) {
+  if (data) munmap(data, size);
+}
+
 // ---------------- MappedGraph ----------------
 void MappedGraph::unmap() {
-  if (data_) munmap(data_, size_);
+  unmap_file(data_, size_);
   data_ = nullptr; size_ = 0; hdr_ = nullptr; nodes_ = nullptr; edges_ = nullptr;
 }
 
 bool MappedGraph::open(const std::string& path, std::string& err) {
   unmap();
-#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-  err = "big-endian CPU not supported";
-  return false;
-#endif
-  int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
-  if (fd < 0) { err = "cannot open file"; return false; }
-  struct stat st;
-  if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size <= 0) {
-    ::close(fd); err = "not a regular file"; return false;
-  }
-  size_t size = static_cast<size_t>(st.st_size);
-  void* p = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
-  ::close(fd);
-  if (p == MAP_FAILED) { err = "mmap failed"; return false; }
-  if (!validate(p, size, err)) { munmap(p, size); return false; }
+  size_t size = 0;
+  void* p = map_file(path, size, err);
+  if (!p) return false;
+  if (!validate(p, size, err)) { unmap_file(p, size); return false; }
   data_ = p; size_ = size;
   hdr_ = static_cast<const Header*>(p);
   nodes_ = reinterpret_cast<const Node*>(hdr_ + 1);
@@ -136,24 +148,39 @@ bool SpatialIndex::nearest(int32_t lat, int32_t lon, double max_m, uint32_t& nod
 }
 
 // ---------------- Router (A* / Dijkstra) ----------------
-Router::Router(const MappedGraph& g)
-    : g_(g), cost_(g.num_nodes()), stamp_(g.num_nodes(), 0),
-      parent_node_(g.num_nodes()), parent_edge_(g.num_nodes()) {}
+Router::Router(const MappedGraph& g) : g_(g) {}
 
 PathResult Router::find(uint32_t s, uint32_t t, bool astar) {
   PathResult res;
   const uint32_t n = g_.num_nodes();
   if (s >= n || t >= n) return res;
+  if (cost_.empty()) {  // allocate on first use (not needed when CH answers the queries)
+    cost_.assign(n, 0); stamp_.assign(n, 0); parent_node_.assign(n, 0); parent_edge_.assign(n, 0);
+  }
+  if (astar && !heuristic_ready_) {
+    // Tightest valid guess: the slowest time-per-meter found on any edge of THIS graph.
+    double c = 1e9;
+    for (uint32_t u = 0; u < n; ++u) {
+      const Node& a = g_.node(u);
+      for (const Edge* e = g_.edge_begin(u); e != g_.edge_end(u); ++e) {
+        const Node& b = g_.node(e->target);
+        double d = haversine_m(a.lat_e7 * 1e-7, a.lon_e7 * 1e-7, b.lat_e7 * 1e-7, b.lon_e7 * 1e-7);
+        if (d > 0.5) c = std::min(c, e->time_ds / d);
+      }
+    }
+    min_ds_per_m_ = c > 1e8 ? 0.0 : c;
+    heuristic_ready_ = true;
+  }
   if (++gen_ == 0) { std::fill(stamp_.begin(), stamp_.end(), 0); gen_ = 1; }
 
   const double tlat = g_.node(t).lat_e7 * 1e-7, tlon = g_.node(t).lon_e7 * 1e-7;
-  // Heuristic: straight distance at 140 km/h (max speed) * 0.65. The 0.65 covers rounding of
-  // stored times, so the heuristic never overestimates and A* stays exact.
+  // Heuristic = straight distance * (slowest time per meter in this graph). Never too high, so A*
+  // stays exact; floor() keeps it consistent.
   auto h = [&](uint32_t v) -> uint64_t {
     if (!astar) return 0;
     const Node& nv = g_.node(v);
     double d = haversine_m(nv.lat_e7 * 1e-7, nv.lon_e7 * 1e-7, tlat, tlon);
-    return static_cast<uint64_t>(d * 36.0 / 140.0 * 0.65);
+    return static_cast<uint64_t>(d * min_ds_per_m_);
   };
 
   struct QE {
@@ -192,6 +219,120 @@ PathResult Router::find(uint32_t s, uint32_t t, bool astar) {
     v = parent_node_[v];
   }
   std::reverse(res.nodes.begin(), res.nodes.end());
+  return res;
+}
+
+}  // namespace pf
+
+namespace pf {
+
+// ---------------- ChGraph ----------------
+bool ChGraph::open(const std::string& path, const MappedGraph& g, std::string& err) {
+  unmap_file(data_, size_);
+  data_ = nullptr; size_ = 0;
+  size_t size = 0;
+  void* p = map_file(path, size, err);
+  if (!p) return false;
+  const uint64_t hash = graph_fingerprint(&g.node(0), g.num_nodes(), g.num_edges());
+  if (!validate_ch(p, size, g.num_nodes(), hash, err)) { unmap_file(p, size); return false; }
+  data_ = p; size_ = size;
+  view_ = ch_view(p);
+  return true;
+}
+
+// ---------------- ChRouter ----------------
+// Finds the edge a->mid (stored in down[mid]) and mid->b (stored in up[mid]), then expands both.
+bool ChRouter::unpack(uint32_t a, uint32_t b, uint32_t mid, std::vector<uint32_t>& out) const {
+  const ChView& v = ch_.view();
+  struct Frame { uint32_t a, b, mid; };
+  std::vector<Frame> stack;
+  stack.push_back({a, b, mid});
+  const size_t limit = size_t(v.h->num_nodes) * 2 + 16;  // a valid file can never need more
+  size_t steps = 0;
+  while (!stack.empty()) {
+    Frame f = stack.back(); stack.pop_back();
+    if (++steps > limit) return false;
+    if (f.mid == kNoMid) { out.push_back(f.b); continue; }
+    const ChEdge* e1 = nullptr;  // a -> mid
+    for (uint32_t k = v.down_first[f.mid]; k < v.down_first[f.mid + 1]; ++k)
+      if (v.down[k].target == f.a && (!e1 || v.down[k].time_ds < e1->time_ds)) e1 = &v.down[k];
+    const ChEdge* e2 = nullptr;  // mid -> b
+    for (uint32_t k = v.up_first[f.mid]; k < v.up_first[f.mid + 1]; ++k)
+      if (v.up[k].target == f.b && (!e2 || v.up[k].time_ds < e2->time_ds)) e2 = &v.up[k];
+    if (!e1 || !e2) return false;
+    stack.push_back({f.mid, f.b, e2->middle});  // second half is handled last
+    stack.push_back({f.a, f.mid, e1->middle});
+  }
+  return true;
+}
+
+PathResult ChRouter::find(uint32_t s, uint32_t t) {
+  PathResult res;
+  const ChView& v = ch_.view();
+  const uint32_t n = v.h->num_nodes;
+  if (s >= n || t >= n) return res;
+  if (s == t) { res.found = true; res.nodes.push_back(s); return res; }
+  if (f_.dist.empty()) {
+    for (Side* sd : {&f_, &b_}) {
+      sd->dist.assign(n, 0); sd->stamp.assign(n, 0); sd->parent.assign(n, 0); sd->parent_edge.assign(n, 0);
+    }
+  }
+  if (++gen_ == 0) { std::fill(f_.stamp.begin(), f_.stamp.end(), 0); std::fill(b_.stamp.begin(), b_.stamp.end(), 0); gen_ = 1; }
+
+  using QE = std::pair<uint32_t, uint32_t>;  // (dist, node)
+  std::priority_queue<QE, std::vector<QE>, std::greater<QE>> pqf, pqb;
+  f_.stamp[s] = gen_; f_.dist[s] = 0; f_.parent[s] = kNoMid; pqf.push({0, s});
+  b_.stamp[t] = gen_; b_.dist[t] = 0; b_.parent[t] = kNoMid; pqb.push({0, t});
+  uint64_t best = ~0ull;
+  uint32_t meet = kNoMid;
+  bool forward_turn = true;
+
+  auto step = [&](Side& me, Side& other, std::priority_queue<QE, std::vector<QE>, std::greater<QE>>& pq,
+                  const uint32_t* first, const ChEdge* edges) {
+    QE top = pq.top(); pq.pop();
+    uint32_t d = top.first, u = top.second;
+    if (d > me.dist[u]) return;  // stale
+    ++res.expanded;
+    if (other.stamp[u] == gen_ && uint64_t(d) + other.dist[u] < best) { best = uint64_t(d) + other.dist[u]; meet = u; }
+    for (uint32_t k = first[u]; k < first[u + 1]; ++k) {
+      uint64_t nd = uint64_t(d) + edges[k].time_ds;
+      if (nd > 0xFFFFFFFFull) continue;
+      uint32_t w = edges[k].target;
+      if (me.stamp[w] != gen_ || nd < me.dist[w]) {
+        me.stamp[w] = gen_; me.dist[w] = static_cast<uint32_t>(nd);
+        me.parent[w] = u; me.parent_edge[w] = k;
+        pq.push({static_cast<uint32_t>(nd), w});
+      }
+    }
+  };
+  for (;;) {
+    bool f_ok = !pqf.empty() && pqf.top().first < best;
+    bool b_ok = !pqb.empty() && pqb.top().first < best;
+    if (!f_ok && !b_ok) break;
+    if (f_ok && (!b_ok || forward_turn)) step(f_, b_, pqf, v.up_first, v.up);
+    else step(b_, f_, pqb, v.down_first, v.down);
+    forward_turn = !forward_turn;
+  }
+  if (meet == kNoMid) return res;
+
+  // forward half: s ... meet (edges are in up[])
+  std::vector<std::pair<uint32_t, const ChEdge*>> fwd;  // (from, edge) from meet back to s
+  for (uint32_t x = meet; f_.parent[x] != kNoMid; x = f_.parent[x]) fwd.push_back({f_.parent[x], &v.up[f_.parent_edge[x]]});
+  res.nodes.push_back(s);
+  for (size_t i = fwd.size(); i-- > 0;) {
+    const ChEdge& e = *fwd[i].second;
+    res.dist_m += e.dist_m;
+    if (!unpack(fwd[i].first, e.target, e.middle, res.nodes)) { res.nodes.clear(); res.dist_m = 0; return res; }
+  }
+  // backward half: meet ... t (real edge x -> next is stored in down[next] with target x)
+  for (uint32_t x = meet; b_.parent[x] != kNoMid; x = b_.parent[x]) {
+    uint32_t next = b_.parent[x];
+    const ChEdge& e = v.down[b_.parent_edge[x]];
+    res.dist_m += e.dist_m;
+    if (!unpack(x, next, e.middle, res.nodes)) { res.nodes.clear(); res.dist_m = 0; return res; }
+  }
+  res.found = true;
+  res.cost_ds = best;
   return res;
 }
 

@@ -1,8 +1,0 @@
-/home/claude/pathfinder-app/build-san/CMakeFiles/pathfinder.dir
-/home/claude/pathfinder-app/build-san/CMakeFiles/graph_info.dir
-/home/claude/pathfinder-app/build-san/CMakeFiles/route_cli.dir
-/home/claude/pathfinder-app/build-san/CMakeFiles/test_engine.dir
-/home/claude/pathfinder-app/build-san/CMakeFiles/test_nav.dir
-/home/claude/pathfinder-app/build-san/CMakeFiles/test.dir
-/home/claude/pathfinder-app/build-san/CMakeFiles/edit_cache.dir
-/home/claude/pathfinder-app/build-san/CMakeFiles/rebuild_cache.dir

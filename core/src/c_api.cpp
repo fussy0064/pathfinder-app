@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -14,6 +16,8 @@ struct pf_engine {
   pf::MappedGraph graph;
   pf::SpatialIndex index;
   std::unique_ptr<pf::Router> router;
+  pf::ChGraph ch;                       // optional "<graph>.ch"
+  std::unique_ptr<pf::ChRouter> ch_router;
   std::mutex mu;
 };
 
@@ -42,14 +46,14 @@ int run_query(pf_engine* e, double slat, double slon, double tlat, double tlon, 
   double d = 0;
   if (!e->index.nearest(to_e7(slat), to_e7(slon), kMaxSnapM, s, d)) return PF_ERR_NO_START;
   if (!e->index.nearest(to_e7(tlat), to_e7(tlon), kMaxSnapM, t, d)) return PF_ERR_NO_TARGET;
-  r = e->router->find(s, t, true);
+  r = e->ch_router ? e->ch_router->find(s, t) : e->router->find(s, t, true);
   return r.found ? PF_OK : PF_ERR_NO_ROUTE;
 }
 }  // namespace
 
 extern "C" {
 
-PF_API const char* pf_version(void) { return "0.4.0"; }
+PF_API const char* pf_version(void) { return "0.5.0"; }
 
 PF_API const char* pf_status_message(int status) {
   switch (status) {
@@ -77,6 +81,11 @@ PF_API pf_engine* pf_engine_open(const char* path, int* status) {
     }
     e->index.build(e->graph);
     e->router.reset(new pf::Router(e->graph));
+    // Optional fast index. A missing or invalid file is not an error: A* is used instead.
+    if (access((std::string(path) + ".ch").c_str(), R_OK) == 0) {
+      std::string ch_err;
+      if (e->ch.open(std::string(path) + ".ch", e->graph, ch_err)) e->ch_router.reset(new pf::ChRouter(e->ch));
+    }
     set_status(status, PF_OK);
     return e.release();
   } catch (...) {
@@ -88,6 +97,8 @@ PF_API pf_engine* pf_engine_open(const char* path, int* status) {
 PF_API void pf_engine_close(pf_engine* e) { delete e; }
 
 PF_API uint32_t pf_engine_node_count(const pf_engine* e) { return e ? e->graph.num_nodes() : 0; }
+
+PF_API int pf_engine_uses_ch(const pf_engine* e) { return (e && e->ch_router) ? 1 : 0; }
 
 PF_API int pf_route_find(pf_engine* e, double slat, double slon, double tlat, double tlon, pf_route* out) {
   if (!out) return PF_ERR_BAD_ARGS;
