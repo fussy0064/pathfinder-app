@@ -196,4 +196,5 @@ CMakeFiles/pathfinder.dir/core/src/c_api.cpp.o: \
  /usr/include/c++/13/bits/charconv.h \
  /usr/include/c++/13/bits/basic_string.tcc \
  /home/claude/pathfinder-app/core/include/graph_format.hpp \
+ /home/claude/pathfinder-app/core/src/nav.hpp \
  /home/claude/pathfinder-app/core/include/pathfinder.h

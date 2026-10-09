@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "engine.hpp"
+#include "nav.hpp"
 #include "pathfinder.h"
 
 struct pf_engine {
@@ -17,8 +18,10 @@ struct pf_engine {
 };
 
 struct pf_route_handle {
-  double distance_m = 0, time_s = 0;
-  std::vector<double> lat, lon;
+  pf_route_handle(double d, double t, std::vector<double> la, std::vector<double> lo)
+      : distance_m(d), time_s(t), nav(std::move(la), std::move(lo)) {}
+  double distance_m, time_s;
+  pf::NavRoute nav;
 };
 
 namespace {
@@ -46,7 +49,7 @@ int run_query(pf_engine* e, double slat, double slon, double tlat, double tlon, 
 
 extern "C" {
 
-PF_API const char* pf_version(void) { return "0.3.0"; }
+PF_API const char* pf_version(void) { return "0.4.0"; }
 
 PF_API const char* pf_status_message(int status) {
   switch (status) {
@@ -126,16 +129,16 @@ PF_API int pf_route_compute(pf_engine* e, double slat, double slon, double tlat,
     pf::PathResult r;
     int st = run_query(e, slat, slon, tlat, tlon, r);
     if (st != PF_OK) return st;
-    std::unique_ptr<pf_route_handle> h(new pf_route_handle());
-    h->distance_m = static_cast<double>(r.dist_m);
-    h->time_s = r.cost_ds / 10.0;
-    h->lat.reserve(r.nodes.size());
-    h->lon.reserve(r.nodes.size());
+    std::vector<double> lat, lon;
+    lat.reserve(r.nodes.size());
+    lon.reserve(r.nodes.size());
     for (uint32_t id : r.nodes) {
       const pf::Node& nd = e->graph.node(id);
-      h->lat.push_back(nd.lat_e7 * 1e-7);
-      h->lon.push_back(nd.lon_e7 * 1e-7);
+      lat.push_back(nd.lat_e7 * 1e-7);
+      lon.push_back(nd.lon_e7 * 1e-7);
     }
+    std::unique_ptr<pf_route_handle> h(new pf_route_handle(
+        static_cast<double>(r.dist_m), r.cost_ds / 10.0, std::move(lat), std::move(lon)));
     *out = h.release();
     return PF_OK;
   } catch (...) {
@@ -146,10 +149,36 @@ PF_API int pf_route_compute(pf_engine* e, double slat, double slon, double tlat,
 PF_API double pf_route_handle_distance_m(const pf_route_handle* h) { return h ? h->distance_m : 0.0; }
 PF_API double pf_route_handle_time_s(const pf_route_handle* h) { return h ? h->time_s : 0.0; }
 PF_API uint32_t pf_route_handle_point_count(const pf_route_handle* h) {
-  return h ? static_cast<uint32_t>(h->lat.size()) : 0;
+  return h ? static_cast<uint32_t>(h->nav.lat().size()) : 0;
 }
-PF_API const double* pf_route_handle_lats(const pf_route_handle* h) { return h ? h->lat.data() : nullptr; }
-PF_API const double* pf_route_handle_lons(const pf_route_handle* h) { return h ? h->lon.data() : nullptr; }
+PF_API const double* pf_route_handle_lats(const pf_route_handle* h) { return h ? h->nav.lat().data() : nullptr; }
+PF_API const double* pf_route_handle_lons(const pf_route_handle* h) { return h ? h->nav.lon().data() : nullptr; }
 PF_API void pf_route_handle_free(pf_route_handle* h) { delete h; }
+
+PF_API uint32_t pf_route_handle_step_count(const pf_route_handle* h) {
+  return h ? static_cast<uint32_t>(h->nav.steps().type.size()) : 0;
+}
+PF_API const int32_t* pf_route_handle_step_types(const pf_route_handle* h) {
+  return h ? h->nav.steps().type.data() : nullptr;
+}
+PF_API const uint32_t* pf_route_handle_step_points(const pf_route_handle* h) {
+  return h ? h->nav.steps().point.data() : nullptr;
+}
+PF_API const double* pf_route_handle_step_dists(const pf_route_handle* h) {
+  return h ? h->nav.steps().dist.data() : nullptr;
+}
+
+PF_API int pf_route_handle_progress(pf_route_handle* h, double lat, double lon, double* out4,
+                                    int32_t* next_step) {
+  if (!h || !out4 || !next_step || !valid_coord(lat, lon)) return PF_ERR_BAD_ARGS;
+  try {
+    pf::Progress p = h->nav.update(lat, lon);
+    out4[0] = p.along_m; out4[1] = p.off_m; out4[2] = p.remaining_m; out4[3] = p.to_next_m;
+    *next_step = p.next_step;
+    return PF_OK;
+  } catch (...) {
+    return PF_ERR_INTERNAL;
+  }
+}
 
 }  // extern "C"

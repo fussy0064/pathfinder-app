@@ -1,6 +1,6 @@
 # PROGRESS
 
-**Current stage: Phase 3 - DONE, but see "NOT verified" below (waiting for your OK to start Phase 4)**
+**Current stage: Phase 4 - DONE (code written; Flutter parts NOT run yet). Waiting for your OK to start Phase 5.**
 
 ## Roadmap
 | Phase | Name | Status |
@@ -8,54 +8,60 @@
 | 1 | Data pipeline + graph pre-processing | DONE |
 | 2 | C++ core pathfinding engine | DONE |
 | 3 | Mobile bridge (FFI/JNI) | DONE (needs your device test) |
-| 4 | Flutter UI + map rendering | NOT STARTED |
+| 4 | Flutter UI + map rendering | DONE (needs your device test) |
 | 5 | Testing, optimization, packaging | NOT STARTED |
 
-## Phase 3 checklist
-- [x] C API v0.3.0: added handle API (`pf_route_compute` + accessors). Dart never needs to match a C struct layout
-- [x] Flutter FFI plugin `mobile/pathfinder_ffi` (Dart API, Isolate worker, bindings)
-- [x] Android build files (Gradle + CMake, 3 ABIs, 16 KB page size, hardened flags)
-- [x] iOS podspec + forwarder files
-- [x] Dart tests written (`test/pathfinder_test.dart`)
-- [x] Docs: `mobile/README.md`
-- [ ] JNI wrapper for pure Java/Kotlin (skipped: the Flutter route does not need it. Tell me if you want it)
+## Phase 4 checklist
+- [x] Navigation logic in C++ (tested): turn steps, progress along route, off-route distance
+- [x] C API v0.4.0: step accessors + `pf_route_handle_progress`
+- [x] Dart plugin: `RouteStep`, `TurnType`, `RouteProgress`, `progress()`, `releaseRoute()`; `LatLng` renamed `GeoPoint`
+- [x] Search data builder `tools/places/build_places.py` (+ tested SQL)
+- [x] Flutter app `app/` (5 screens/states from your diagram):
+  1. Map view with GPS dot, offline chip
+  2. Destination input: offline autocomplete + long-press pin
+  3. "CALCULATING PATH..." then "PATH FOUND: 25 min"
+  4. Navigation: turn banner, progress bar, remaining time/distance, auto reroute
+  5. Offline mode: chip + data status card (downloader is Phase 5)
+- [x] Offline raster tiles from `.mbtiles` (custom flutter_map TileProvider)
+- [x] `tools/make_sample_pack.sh` for a quick smoke test
+- [x] Docs: `app/README.md`
 
 ## What I verified here
 | Check | Result |
 |---|---|
-| C++ tests, normal build | 5965 checks, 0 failed |
-| Same tests with ASan + UBSan | 0 failed |
-| Same tests with ThreadSanitizer (8 threads, 1 engine) | 0 failed |
-| Same tests as 32-bit program (like armeabi-v7a) | 0 failed |
-| Engine cross-compiles for ARM 64-bit and ARM 32-bit | OK |
-| Shared library exports only the 14 `pf_*` functions | OK |
-| Dart files parse with a Dart parser (syntax only) | OK, 0 errors |
+| C++ tests (engine + navigation), normal build | 5973 + 30 checks, 0 failed |
+| Same with ASan + UBSan | 0 failed |
+| Navigation tests as 32-bit program | 30 checks, 0 failed |
+| Turn types: left, right, slight, sharp, u-turn, gentle curve ignored, tight arc = ONE turn, S-bend = 2 turns | pass |
+| Progress: on route, 20 m off, past corner, before start, past end, out-and-back road never goes backwards | pass |
+| Search SQL + builder (Python): case-insensitive, prefix first, `%` `_` literal, SQL injection text harmless | pass |
+| CLI demo (sample map): depart 222 m, right, arrive; 442 m, 35.8 s | pass |
+| All Dart files parse (syntax only) | 0 errors |
 
 ## NOT verified (I could not do these here)
-- Dart code was never run or type-checked: no Dart/Flutter SDK is reachable from my environment.
-- Android `.so` was never built with the real NDK, and nothing ran on a phone or emulator.
-- iOS was never built (no Mac).
-- The ARM builds above use musl, not Android's bionic library.
-Please run the steps in `mobile/README.md` on your PC. If anything fails, send me the error text and I will fix it.
+- No Dart/Flutter code was compiled or run. Type errors are possible. Send me the error text and I will fix it.
+- Dart package versions (flutter_map 7, geolocator 13, sqlite3 2.x) were chosen from memory; pub.dev is not reachable from here.
+- No phone/emulator run, no real GPS, no screenshots of the UI.
+- ARM cross-build was not repeated after adding `nav.cpp` (it is plain C++; 32-bit x86 passed).
+- Real-map speed and a real `.pbf` were never tested.
 
-## Security done in Phase 3
-- Coordinates are checked in Dart (`LatLng`) and again in C++
-- Graph path checked (empty / null byte)
-- Native memory is copied out and freed inside the worker (handle freed in `finally`)
-- Engine pointer lives only in the worker Isolate
-- Library exports only the `pf_*` API (hidden visibility)
-- Stack protector, RELRO / now-binding, 16 KB alignment on Android
+## Security done in Phase 4
+- No INTERNET permission, no network code (offline by design); backups off, cleartext off
+- Search text: parameterized SQL, `%`/`_`/`\` escaped, length limited to 80, result limit
+- Databases opened read-only; versions checked
+- GPS values validated in Dart and C++; bad fixes (accuracy > 50 m) ignored while navigating
+- Native route memory is released on reroute / end / close
+- Only raster tiles accepted; vector tiles give a clear message
 
 ## Known limits
-- Contraction Hierarchies and bidirectional A* not done yet (Phase 5)
-- Speed not measured on a real map yet (needs your `.pbf`)
+- Turn text comes from road shape only (no street names, no roundabout exits)
+- No voice, no keep-awake, no heading-up map rotation
+- Contraction Hierarchies and bidirectional A* not done (Phase 5, after real-map timing)
 - GPS snaps to nearest node, not nearest road segment
-- Graph file must be a real file (copy from assets first)
-- Android build.gradle versions (AGP 8.7.3, compileSdk 35) may need a small change for your Flutter version
+- Data files are copied by hand (adb) until the Phase 5 downloader
 
-## NEXT: Phase 4 (needs your permission)
-1. Flutter app shell (`app/`) using `pathfinder_ffi`
-2. Offline map tiles (MapLibre or flutter_map + .mbtiles)
-3. GPS location (`geolocator`)
-4. Search screen (SpatiaLite / SQLite)
-5. Route line on map + turn-by-turn screen
+## NEXT: Phase 5 (needs your permission)
+1. In-app downloader / importer for regional packs (graph + places + tiles)
+2. Benchmark on a real city `.pbf`, then add Contraction Hierarchies if needed
+3. Snap to nearest road segment
+4. Release build, signing notes, final security review, CI

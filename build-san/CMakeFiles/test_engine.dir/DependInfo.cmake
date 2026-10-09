@@ -9,6 +9,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/claude/pathfinder-app/core/src/engine.cpp" "CMakeFiles/test_engine.dir/core/src/engine.cpp.o" "gcc" "CMakeFiles/test_engine.dir/core/src/engine.cpp.o.d"
+  "/home/claude/pathfinder-app/core/src/nav.cpp" "CMakeFiles/test_engine.dir/core/src/nav.cpp.o" "gcc" "CMakeFiles/test_engine.dir/core/src/nav.cpp.o.d"
   "/home/claude/pathfinder-app/tests/test_engine.cpp" "CMakeFiles/test_engine.dir/tests/test_engine.cpp.o" "gcc" "CMakeFiles/test_engine.dir/tests/test_engine.cpp.o.d"
   )
 

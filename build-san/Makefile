@@ -178,6 +178,19 @@ test_engine/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/build
 .PHONY : test_engine/fast
 
+#=============================================================================
+# Target rules for targets named test_nav
+
+# Build rule for target.
+test_nav: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_nav
+.PHONY : test_nav
+
+# fast build rule for target.
+test_nav/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/build
+.PHONY : test_nav/fast
+
 core/src/c_api.o: core/src/c_api.cpp.o
 .PHONY : core/src/c_api.o
 
@@ -209,6 +222,7 @@ core/src/engine.o: core/src/engine.cpp.o
 core/src/engine.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/pathfinder.dir/build.make CMakeFiles/pathfinder.dir/core/src/engine.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/core/src/engine.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/core/src/engine.cpp.o
 .PHONY : core/src/engine.cpp.o
 
 core/src/engine.i: core/src/engine.cpp.i
@@ -218,6 +232,7 @@ core/src/engine.i: core/src/engine.cpp.i
 core/src/engine.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/pathfinder.dir/build.make CMakeFiles/pathfinder.dir/core/src/engine.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/core/src/engine.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/core/src/engine.cpp.i
 .PHONY : core/src/engine.cpp.i
 
 core/src/engine.s: core/src/engine.cpp.s
@@ -227,7 +242,38 @@ core/src/engine.s: core/src/engine.cpp.s
 core/src/engine.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/pathfinder.dir/build.make CMakeFiles/pathfinder.dir/core/src/engine.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/core/src/engine.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/core/src/engine.cpp.s
 .PHONY : core/src/engine.cpp.s
+
+core/src/nav.o: core/src/nav.cpp.o
+.PHONY : core/src/nav.o
+
+# target to build an object file
+core/src/nav.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pathfinder.dir/build.make CMakeFiles/pathfinder.dir/core/src/nav.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/core/src/nav.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/core/src/nav.cpp.o
+.PHONY : core/src/nav.cpp.o
+
+core/src/nav.i: core/src/nav.cpp.i
+.PHONY : core/src/nav.i
+
+# target to preprocess a source file
+core/src/nav.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pathfinder.dir/build.make CMakeFiles/pathfinder.dir/core/src/nav.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/core/src/nav.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/core/src/nav.cpp.i
+.PHONY : core/src/nav.cpp.i
+
+core/src/nav.s: core/src/nav.cpp.s
+.PHONY : core/src/nav.s
+
+# target to generate assembly for a file
+core/src/nav.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/pathfinder.dir/build.make CMakeFiles/pathfinder.dir/core/src/nav.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/core/src/nav.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/core/src/nav.cpp.s
+.PHONY : core/src/nav.cpp.s
 
 tests/test_engine.o: tests/test_engine.cpp.o
 .PHONY : tests/test_engine.o
@@ -252,6 +298,30 @@ tests/test_engine.s: tests/test_engine.cpp.s
 tests/test_engine.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/tests/test_engine.cpp.s
 .PHONY : tests/test_engine.cpp.s
+
+tests/test_nav.o: tests/test_nav.cpp.o
+.PHONY : tests/test_nav.o
+
+# target to build an object file
+tests/test_nav.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/tests/test_nav.cpp.o
+.PHONY : tests/test_nav.cpp.o
+
+tests/test_nav.i: tests/test_nav.cpp.i
+.PHONY : tests/test_nav.i
+
+# target to preprocess a source file
+tests/test_nav.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/tests/test_nav.cpp.i
+.PHONY : tests/test_nav.cpp.i
+
+tests/test_nav.s: tests/test_nav.cpp.s
+.PHONY : tests/test_nav.s
+
+# target to generate assembly for a file
+tests/test_nav.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_nav.dir/build.make CMakeFiles/test_nav.dir/tests/test_nav.cpp.s
+.PHONY : tests/test_nav.cpp.s
 
 tools/graph_info/main.o: tools/graph_info/main.cpp.o
 .PHONY : tools/graph_info/main.o
@@ -314,15 +384,22 @@ help:
 	@echo "... pathfinder"
 	@echo "... route_cli"
 	@echo "... test_engine"
+	@echo "... test_nav"
 	@echo "... core/src/c_api.o"
 	@echo "... core/src/c_api.i"
 	@echo "... core/src/c_api.s"
 	@echo "... core/src/engine.o"
 	@echo "... core/src/engine.i"
 	@echo "... core/src/engine.s"
+	@echo "... core/src/nav.o"
+	@echo "... core/src/nav.i"
+	@echo "... core/src/nav.s"
 	@echo "... tests/test_engine.o"
 	@echo "... tests/test_engine.i"
 	@echo "... tests/test_engine.s"
+	@echo "... tests/test_nav.o"
+	@echo "... tests/test_nav.i"
+	@echo "... tests/test_nav.s"
 	@echo "... tools/graph_info/main.o"
 	@echo "... tools/graph_info/main.i"
 	@echo "... tools/graph_info/main.s"

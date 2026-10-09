@@ -14,8 +14,12 @@ Code:
 ```dart
 final engine = await PathfinderEngine.open(graphFilePath); // real file path
 try {
-  final r = await engine.route(LatLng(10.0, 10.0), LatLng(10.002, 10.002));
-  print('${r.distanceM} m, ${r.timeS} s, ${r.pointCount} points');
+  final r = await engine.route(GeoPoint(10.0, 10.0), GeoPoint(10.002, 10.002));
+  print('${r.distanceM} m, ${r.timeS} s, ${r.steps.length} steps');
+  // while driving: where am I on the route?
+  final p = await engine.progress(r.routeId, GeoPoint(10.001, 10.0));
+  print('${p.remainingM} m to go, next step ${p.nextStep}');
+  engine.releaseRoute(r.routeId); // frees native memory
 } on PathfinderException catch (e) {
   print(e.message); // e.g. "No route found"
 }

@@ -12,6 +12,8 @@ tools/graph_info validate + print graph stats
 tools/route_cli try a route from the terminal
 tests/          test_engine.cpp
 mobile/         Flutter FFI plugin (see mobile/README.md)
+app/            Flutter app (see app/README.md)
+tools/places/   build places.db (search data)
 data/sample/    tiny.osm test map
 PROGRESS.md     where we are + what is next
 ```

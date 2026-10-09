@@ -59,6 +59,24 @@ PF_API const double* pf_route_handle_lats(const pf_route_handle* h);
 PF_API const double* pf_route_handle_lons(const pf_route_handle* h);
 PF_API void pf_route_handle_free(pf_route_handle* h);
 
+/* ---- Turn-by-turn + progress (v0.4.0) ----
+ * Steps: step 0 is DEPART, the last step is ARRIVE. step_dists[i] = meters from step i to step i+1.
+ * Turn types: see PF_TURN_* below. Turns are found from the route shape only (no street names). */
+enum {
+  PF_TURN_DEPART = 0, PF_TURN_STRAIGHT, PF_TURN_SLIGHT_LEFT, PF_TURN_LEFT, PF_TURN_SHARP_LEFT,
+  PF_TURN_SLIGHT_RIGHT, PF_TURN_RIGHT, PF_TURN_SHARP_RIGHT, PF_TURN_UTURN, PF_TURN_ARRIVE
+};
+PF_API uint32_t pf_route_handle_step_count(const pf_route_handle* h);
+PF_API const int32_t* pf_route_handle_step_types(const pf_route_handle* h);
+PF_API const uint32_t* pf_route_handle_step_points(const pf_route_handle* h);
+PF_API const double* pf_route_handle_step_dists(const pf_route_handle* h);
+
+/* Match a GPS position to the route. out4 receives 4 doubles:
+ * [0] along_m  [1] off_route_m  [2] remaining_m  [3] to_next_step_m.  *next_step = step index.
+ * Not thread-safe per handle (one navigation = one thread). */
+PF_API int pf_route_handle_progress(pf_route_handle* h, double lat, double lon,
+                                    double* out4, int32_t* next_step);
+
 #ifdef __cplusplus
 }
 #endif

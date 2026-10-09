@@ -1,6 +1,8 @@
 file(REMOVE_RECURSE
   "CMakeFiles/test_engine.dir/core/src/engine.cpp.o"
   "CMakeFiles/test_engine.dir/core/src/engine.cpp.o.d"
+  "CMakeFiles/test_engine.dir/core/src/nav.cpp.o"
+  "CMakeFiles/test_engine.dir/core/src/nav.cpp.o.d"
   "CMakeFiles/test_engine.dir/tests/test_engine.cpp.o"
   "CMakeFiles/test_engine.dir/tests/test_engine.cpp.o.d"
   "test_engine"

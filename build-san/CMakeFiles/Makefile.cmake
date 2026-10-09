@@ -51,4 +51,5 @@ set(CMAKE_DEPEND_INFO_FILES
   "CMakeFiles/graph_info.dir/DependInfo.cmake"
   "CMakeFiles/route_cli.dir/DependInfo.cmake"
   "CMakeFiles/test_engine.dir/DependInfo.cmake"
+  "CMakeFiles/test_nav.dir/DependInfo.cmake"
   )

@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
 /// A GPS point. The constructor rejects NaN, infinity and out-of-range values.
-class LatLng {
-  LatLng(this.lat, this.lon) {
+class GeoPoint {
+  GeoPoint(this.lat, this.lon) {
     if (!lat.isFinite || !lon.isFinite || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
       throw ArgumentError('Invalid coordinates: $lat, $lon');
     }
@@ -11,20 +11,49 @@ class LatLng {
   final double lon;
 
   @override
-  String toString() => 'LatLng($lat, $lon)';
+  String toString() => 'GeoPoint($lat, $lon)';
 }
 
-/// Result of a successful route request.
+/// Maneuver kinds. Order matches PF_TURN_* in core/include/pathfinder.h.
+enum TurnType {
+  depart, straight, slightLeft, left, sharpLeft, slightRight, right, sharpRight, uTurn, arrive;
+
+  static TurnType fromCode(int code) =>
+      (code >= 0 && code < TurnType.values.length) ? TurnType.values[code] : TurnType.straight;
+}
+
+/// One maneuver. [distanceM] is the distance from this step to the next one.
+class RouteStep {
+  RouteStep(this.type, this.pointIndex, this.distanceM);
+  final TurnType type;
+  final int pointIndex;
+  final double distanceM;
+}
+
+/// Result of a successful route request. Call PathfinderEngine.releaseRoute(routeId)
+/// when the route is no longer needed (frees native memory).
 class RouteResult {
-  RouteResult(this.distanceM, this.timeS, this.lats, this.lons);
+  RouteResult(this.routeId, this.distanceM, this.timeS, this.lats, this.lons, this.steps);
+  final int routeId;
   final double distanceM;
   final double timeS;
   final Float64List lats;
   final Float64List lons;
+  final List<RouteStep> steps;
 
   int get pointCount => lats.length;
-  List<LatLng> get points =>
-      List<LatLng>.generate(lats.length, (i) => LatLng(lats[i], lons[i]), growable: false);
+  List<GeoPoint> get points =>
+      List<GeoPoint>.generate(lats.length, (i) => GeoPoint(lats[i], lons[i]), growable: false);
+}
+
+/// Where the user is on a route (from PathfinderEngine.progress).
+class RouteProgress {
+  RouteProgress(this.alongM, this.offRouteM, this.remainingM, this.toNextM, this.nextStep);
+  final double alongM;
+  final double offRouteM;
+  final double remainingM;
+  final double toNextM;
+  final int nextStep;
 }
 
 /// Status codes match core/include/pathfinder.h (8 is added on the Dart side).

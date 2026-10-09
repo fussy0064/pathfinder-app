@@ -269,6 +269,15 @@ static void test_handle_api_and_threads() {
   CHECK(std::fabs(pf_route_handle_lons(h)[2] - 10.002) < 1e-9);
   CHECK(pf_route_handle_distance_m(h) > 200 && pf_route_handle_distance_m(h) < 240);
   CHECK(pf_route_handle_time_s(h) > 14 && pf_route_handle_time_s(h) < 18);
+  CHECK(pf_route_handle_step_count(h) == 2);
+  CHECK(pf_route_handle_step_types(h)[0] == PF_TURN_DEPART && pf_route_handle_step_types(h)[1] == PF_TURN_ARRIVE);
+  CHECK(pf_route_handle_step_points(h)[1] == 2);
+  CHECK(std::fabs(pf_route_handle_step_dists(h)[0] - 219) < 3 && pf_route_handle_step_dists(h)[1] == 0);
+  { double o[4]; int32_t ns = -1;
+    CHECK(pf_route_handle_progress(h, 10.0, 10.001, o, &ns) == PF_OK);   // at the middle node
+    CHECK(std::fabs(o[0] - 110) < 3 && o[1] < 1 && std::fabs(o[2] - 110) < 3 && ns == 1);
+    CHECK(pf_route_handle_progress(h, NAN, 10.0, o, &ns) == PF_ERR_BAD_ARGS);
+    CHECK(pf_route_handle_progress(h, 10.0, 10.0, nullptr, &ns) == PF_ERR_BAD_ARGS); }
   pf_route_handle_free(h); pf_route_handle_free(nullptr);
 
   CHECK(pf_route_compute(e, 10.0, 10.0, 10.0, 10.003, &h) == PF_ERR_NO_ROUTE && h == nullptr);

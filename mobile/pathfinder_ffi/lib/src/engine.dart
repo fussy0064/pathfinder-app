@@ -14,6 +14,7 @@ class PathfinderEngine {
   final ReceivePort _responses;
   late final SendPort _commands;
   final Map<int, Completer<RouteResult>> _pending = {};
+  final Map<int, Completer<RouteProgress>> _pendingProgress = {};
   Completer<void>? _closeDone;
   int _nextId = 0;
   int _nodeCount = 0;
@@ -52,7 +53,24 @@ class PathfinderEngine {
           if (status != kStatusOk) {
             c.completeError(PathfinderException(status));
           } else {
-            c.complete(RouteResult(msg[3] as double, msg[4] as double, msg[5] as Float64List, msg[6] as Float64List));
+            final types = msg[8] as Int32List;
+            final points = msg[9] as Uint32List;
+            final dists = msg[10] as Float64List;
+            final steps = List<RouteStep>.generate(
+                types.length, (i) => RouteStep(TurnType.fromCode(types[i]), points[i], dists[i]),
+                growable: false);
+            c.complete(RouteResult(msg[3] as int, msg[4] as double, msg[5] as double,
+                msg[6] as Float64List, msg[7] as Float64List, steps));
+          }
+        case 'progress':
+          final c = engine._pendingProgress.remove(msg[1] as int);
+          if (c == null) return;
+          final status = msg[2] as int;
+          if (status != kStatusOk) {
+            c.completeError(PathfinderException(status));
+          } else {
+            c.complete(RouteProgress(msg[3] as double, msg[4] as double, msg[5] as double,
+                msg[6] as double, msg[7] as int));
           }
         case 'closed':
           engine._closeDone?.complete();
@@ -71,13 +89,28 @@ class PathfinderEngine {
 
   /// Finds the fastest route. Throws [PathfinderException] when no route exists
   /// (see its `status`) and [ArgumentError] for invalid coordinates.
-  Future<RouteResult> route(LatLng start, LatLng target) {
+  Future<RouteResult> route(GeoPoint start, GeoPoint target) {
     if (_closed) return Future<RouteResult>.error(StateError('Engine is closed'));
     final id = _nextId++;
     final completer = Completer<RouteResult>();
     _pending[id] = completer;
     _commands.send(<Object?>['route', id, start.lat, start.lon, target.lat, target.lon]);
     return completer.future;
+  }
+
+  /// Where is [position] on a route from [route]? Cheap; call it on every GPS update.
+  Future<RouteProgress> progress(int routeId, GeoPoint position) {
+    if (_closed) return Future<RouteProgress>.error(StateError('Engine is closed'));
+    final id = _nextId++;
+    final completer = Completer<RouteProgress>();
+    _pendingProgress[id] = completer;
+    _commands.send(<Object?>['progress', id, routeId, position.lat, position.lon]);
+    return completer.future;
+  }
+
+  /// Frees the native memory of a route. Safe to call twice.
+  void releaseRoute(int routeId) {
+    if (!_closed) _commands.send(<Object?>['release', routeId]);
   }
 
   /// Frees the native engine and stops the background Isolate. Safe to call twice.
@@ -88,6 +121,10 @@ class PathfinderEngine {
       c.completeError(StateError('Engine closed'));
     }
     _pending.clear();
+    for (final c in _pendingProgress.values) {
+      c.completeError(StateError('Engine closed'));
+    }
+    _pendingProgress.clear();
     final done = Completer<void>();
     _closeDone = done;
     _commands.send(<Object?>['close']);

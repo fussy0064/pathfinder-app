@@ -10,6 +10,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/claude/pathfinder-app/core/src/c_api.cpp" "CMakeFiles/pathfinder.dir/core/src/c_api.cpp.o" "gcc" "CMakeFiles/pathfinder.dir/core/src/c_api.cpp.o.d"
   "/home/claude/pathfinder-app/core/src/engine.cpp" "CMakeFiles/pathfinder.dir/core/src/engine.cpp.o" "gcc" "CMakeFiles/pathfinder.dir/core/src/engine.cpp.o.d"
+  "/home/claude/pathfinder-app/core/src/nav.cpp" "CMakeFiles/pathfinder.dir/core/src/nav.cpp.o" "gcc" "CMakeFiles/pathfinder.dir/core/src/nav.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

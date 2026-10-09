@@ -34,7 +34,19 @@ class PathfinderBindings {
         lons = lib.lookupFunction<Pointer<Double> Function(Pointer<Void>),
             Pointer<Double> Function(Pointer<Void>)>('pf_route_handle_lons'),
         handleFree = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>(
-            'pf_route_handle_free');
+            'pf_route_handle_free'),
+        stepCount = lib.lookupFunction<Uint32 Function(Pointer<Void>), int Function(Pointer<Void>)>(
+            'pf_route_handle_step_count'),
+        stepTypes = lib.lookupFunction<Pointer<Int32> Function(Pointer<Void>),
+            Pointer<Int32> Function(Pointer<Void>)>('pf_route_handle_step_types'),
+        stepPoints = lib.lookupFunction<Pointer<Uint32> Function(Pointer<Void>),
+            Pointer<Uint32> Function(Pointer<Void>)>('pf_route_handle_step_points'),
+        stepDists = lib.lookupFunction<Pointer<Double> Function(Pointer<Void>),
+            Pointer<Double> Function(Pointer<Void>)>('pf_route_handle_step_dists'),
+        progress = lib.lookupFunction<
+            Int32 Function(Pointer<Void>, Double, Double, Pointer<Double>, Pointer<Int32>),
+            int Function(Pointer<Void>, double, double, Pointer<Double>,
+                Pointer<Int32>)>('pf_route_handle_progress');
 
   final Pointer<Void> Function(Pointer<Utf8>, Pointer<Int32>) engineOpen;
   final void Function(Pointer<Void>) engineClose;
@@ -47,4 +59,9 @@ class PathfinderBindings {
   final Pointer<Double> Function(Pointer<Void>) lats;
   final Pointer<Double> Function(Pointer<Void>) lons;
   final void Function(Pointer<Void>) handleFree;
+  final int Function(Pointer<Void>) stepCount;
+  final Pointer<Int32> Function(Pointer<Void>) stepTypes;
+  final Pointer<Uint32> Function(Pointer<Void>) stepPoints;
+  final Pointer<Double> Function(Pointer<Void>) stepDists;
+  final int Function(Pointer<Void>, double, double, Pointer<Double>, Pointer<Int32>) progress;
 }
