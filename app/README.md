@@ -8,12 +8,13 @@ It uses `../mobile/pathfinder_ffi` (C++ engine). The app has no internet code.
 cd app
 flutter create --org com.pathfinder --project-name pathfinder_app .
 git checkout lib test pubspec.yaml analysis_options.yaml   # keep our files if flutter create replaced any
+python3 ../tools/setup_android.py .                        # step 2 below, automated
 flutter pub get
 ```
 `flutter create` only adds the `android/` and `ios/` folders.
 Package versions in `pubspec.yaml` could not be checked from my environment. If `pub get` complains, relax the version and tell me.
 
-## 2. Android settings
+## 2. Android settings (done by `tools/setup_android.py`; manual version)
 `android/app/src/main/AndroidManifest.xml`, inside `<manifest>`:
 ```xml
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -28,6 +29,7 @@ iOS: add `NSLocationWhenInUseUsageDescription` to `ios/Runner/Info.plist`.
 | File | What | How to make it |
 |---|---|---|
 | `map_graph.bin` | road graph (required) | `build/extractor region.osm.pbf map_graph.bin` |
+| `map_graph.bin.ch` | fast routing index (optional, same folder) | `build/ch_builder map_graph.bin` |
 | `places.db` | search (optional) | `python3 tools/places/build_places.py region.osm.pbf places.db` (needs `pip install osmium`) |
 | `tiles.mbtiles` | map picture (optional) | RASTER png/jpg mbtiles (QGIS "Generate XYZ tiles (MBTiles)", MOBAC, ...). Vector (pbf) tiles are not supported yet. |
 
@@ -35,7 +37,9 @@ Folder on Android: `/sdcard/Android/data/com.pathfinder.pathfinder_app/files/pat
 ```
 adb push map_graph.bin places.db tiles.mbtiles /sdcard/Android/data/com.pathfinder.pathfinder_app/files/pathfinder/
 ```
-(The in-app downloader comes in Phase 5.)
+Or use the in-app downloader: tap the "Offline mode" chip, then "Map data". It needs a pack server
+(`docs/PACKS.md`), the INTERNET permission and `--dart-define=PACK_BASE_URL=https://.../packs/` (`docs/RELEASE.md`).
+Without a server the screen only shows what is installed.
 
 ## 4. Quick smoke test (no real map needed)
 ```
@@ -53,6 +57,7 @@ flutter build apk --release
 ```
 
 ## How it works
+- With `map_graph.bin.ch` present the engine uses Contraction Hierarchies (under 2 ms in my tests); otherwise A*. The chip says "fast routing" when active.
 - Search: SQLite `LIKE` on `places.db` (typed text is escaped, so `%` and `_` are plain characters).
 - Long-press the map to drop a destination pin (works without places.db).
 - Route: engine finds the fastest path; turn steps come from the route shape.

@@ -14,6 +14,10 @@ tests/          test_engine.cpp
 mobile/         Flutter FFI plugin (see mobile/README.md)
 app/            Flutter app (see app/README.md)
 tools/places/   build places.db (search data)
+tools/ch_builder  map_graph.bin -> map_graph.bin.ch (fast routing index)
+tools/make_pack.py  build a downloadable pack + catalog.json
+tools/bench, tools/bench/bench_map.cpp  speed tests
+docs/           SECURITY.md, PACKS.md, RELEASE.md
 data/sample/    tiny.osm test map
 PROGRESS.md     where we are + what is next
 ```

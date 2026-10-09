@@ -1,0 +1,131 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake libosmium2-dev libprotozero-dev zlib1g-dev libexpat1-dev libbz2-dev
+          pip install osmium
+      - name: Build and test (C++ + Python)
+        id: test
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p logs
+          cmake -S . -B build 2>&1 | tail -3 | tee logs/native.log
+          cmake --build build -j4 2>&1 | tee -a logs/native.log
+          ctest --test-dir build --output-on-failure 2>&1 | tee -a logs/native.log
+      - name: Sanitizer build (ASan + UBSan)
+        id: san
+        continue-on-error: true
+        shell: bash
+        run: |
+          cmake -S . -B build-san -DPF_SANITIZE=ON -DPF_BUILD_TOOLS=OFF 2>&1 | tail -1
+          cmake --build build-san -j4 2>&1 | tail -3
+          ctest --test-dir build-san --output-on-failure -E "places|pack" 2>&1 | tee logs/native_sanitizers.log
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "test=${{ steps.test.outcome }} sanitizers=${{ steps.san.outcome }}" > logs/summary.txt
+          GITHUB_TOKEN=${{ github.token }} tools/ci/publish_logs.sh ci-logs-native
+
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build native library for host tests
+        id: native
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p logs
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake libosmium2-dev libprotozero-dev zlib1g-dev libexpat1-dev libbz2-dev
+          cmake -S . -B build -DPF_BUILD_TESTS=OFF 2>&1 | tail -1
+          cmake --build build -j4 --target pathfinder extractor 2>&1 | tail -3
+          build/extractor data/sample/tiny.osm build/tiny.bin
+          flutter --version 2>&1 | tee logs/flutter_version.log
+      - name: Generate platform folders and apply Android settings
+        id: create
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd app
+          cp -r lib /tmp/lib_bak; cp -r test /tmp/test_bak; cp pubspec.yaml /tmp/pubspec_bak; cp analysis_options.yaml /tmp/ao_bak
+          flutter create --org com.pathfinder --project-name pathfinder_app . 2>&1 | tail -5 | tee ../logs/flutter_create.log
+          rm -rf lib test; cp -r /tmp/lib_bak lib; cp -r /tmp/test_bak test; cp /tmp/pubspec_bak pubspec.yaml; cp /tmp/ao_bak analysis_options.yaml
+          python3 ../tools/setup_android.py . 2>&1 | tee -a ../logs/flutter_create.log
+      - name: pub get
+        id: pubget
+        continue-on-error: true
+        shell: bash
+        run: |
+          (cd mobile/pathfinder_ffi && flutter pub get) 2>&1 | tee logs/pubget_plugin.log
+          (cd app && flutter pub get) 2>&1 | tee logs/pubget_app.log
+      - name: Analyze
+        id: analyze
+        continue-on-error: true
+        shell: bash
+        run: |
+          (cd mobile/pathfinder_ffi && flutter analyze) 2>&1 | tee logs/analyze_plugin.log
+          (cd app && flutter analyze) 2>&1 | tee logs/analyze_app.log
+      - name: Test plugin (real FFI + Isolate against the C++ library)
+        id: test_plugin
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd mobile/pathfinder_ffi
+          PATHFINDER_LIB=$GITHUB_WORKSPACE/build/libpathfinder.so PATHFINDER_GRAPH=$GITHUB_WORKSPACE/build/tiny.bin \
+            flutter test --reporter expanded 2>&1 | tee ../../logs/test_plugin.log
+      - name: Test app
+        id: test_app
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd app
+          flutter test --reporter expanded 2>&1 | tee ../logs/test_app.log
+      - name: Build debug APK (compiles the C++ engine with the Android NDK)
+        id: apk_debug
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd app
+          flutter build apk --debug 2>&1 | tail -60 | tee ../logs/apk_debug.log
+          unzip -l build/app/outputs/flutter-apk/app-debug.apk | grep -E "libpathfinder|libsqlite" | tee ../logs/apk_libs.log
+      - name: Build release APK
+        id: apk_release
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd app
+          flutter build apk --release 2>&1 | tail -40 | tee ../logs/apk_release.log
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "native=${{ steps.native.outcome }} create=${{ steps.create.outcome }} pubget=${{ steps.pubget.outcome }}"
+            echo "analyze=${{ steps.analyze.outcome }} test_plugin=${{ steps.test_plugin.outcome }} test_app=${{ steps.test_app.outcome }}"
+            echo "apk_debug=${{ steps.apk_debug.outcome }} apk_release=${{ steps.apk_release.outcome }}"
+          } > logs/summary.txt
+          GITHUB_TOKEN=${{ github.token }} tools/ci/publish_logs.sh ci-logs-flutter

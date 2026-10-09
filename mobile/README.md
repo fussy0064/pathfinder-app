@@ -24,6 +24,7 @@ try {
   print(e.message); // e.g. "No route found"
 }
 await engine.close();
+// engine.usesCh == true when map_graph.bin.ch sits next to the graph (fast routing)
 ```
 Important: Flutter assets are NOT real files. Copy `map_graph.bin` to the app
 documents folder first (the Phase 5 downloader will do this). The engine needs a file path for mmap.
