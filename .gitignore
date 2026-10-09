@@ -1,0 +1,8 @@
+build/
+*.bin
+*.pbf
+*.mbtiles
+.env
+*.key
+*.jks
+local.properties
