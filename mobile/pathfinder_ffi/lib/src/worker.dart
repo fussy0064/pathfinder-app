@@ -101,5 +101,5 @@ void workerMain(List<Object?> init) {
     }
   });
 
-  reply.send(<Object?>['ready', commands.sendPort, bindings.nodeCount(engine)]);
+  reply.send(<Object?>['ready', commands.sendPort, bindings.nodeCount(engine), bindings.usesCh(engine)]);
 }

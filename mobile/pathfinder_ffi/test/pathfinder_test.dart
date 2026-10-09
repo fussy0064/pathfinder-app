@@ -27,6 +27,7 @@ void main() {
   test('route on the sample map', () async {
     final e = await PathfinderEngine.open(graph!, libraryPath: lib);
     expect(e.nodeCount, 9);
+    expect(e.usesCh, isFalse); // the sample has no .ch file
     final r = await e.route(GeoPoint(10.0, 10.0), GeoPoint(10.002, 10.002));
     expect(r.pointCount, 5);
     expect(r.distanceM, closeTo(442, 3));

@@ -7,6 +7,7 @@ import 'package:pathfinder_ffi/pathfinder_ffi.dart';
 
 import 'data/data_store.dart';
 import 'data/mbtiles_provider.dart';
+import 'data/pack_manager.dart';
 import 'data/places_db.dart';
 import 'services/location_service.dart';
 
@@ -20,6 +21,8 @@ class AppController extends ChangeNotifier {
   static const int _offRouteUpdates = 3; // ... for this many GPS updates in a row = reroute
   static const double _arriveM = 20;
   static const double _maxAccuracyM = 50; // ignore worse GPS fixes while navigating
+  // Set at build time: flutter build apk --dart-define=PACK_BASE_URL=https://example.org/packs/
+  static const String _packUrl = String.fromEnvironment('PACK_BASE_URL');
 
   final LocationService _location;
 
@@ -34,6 +37,9 @@ class AppController extends ChangeNotifier {
   Place? destination;
   RouteResult? route;
   List<LatLng> routePoints = const [];
+  PackManager? packs; // null when no download server is configured
+  String? packsProblem;
+  bool usesCh = false; // true = fast routing index (.ch) is active
   RouteProgress? progress;
   int? calcMillis;
   bool rerouting = false;
@@ -51,9 +57,58 @@ class AppController extends ChangeNotifier {
   Future<void> init() async {
     phase = AppPhase.loading;
     _notify();
+    await _startLocation();
+    await _loadData();
+  }
+
+  /// Re-reads the data files (call after installing or deleting map data).
+  Future<void> reloadData() async {
+    if (phase == AppPhase.navigating || phase == AppPhase.calculating || phase == AppPhase.routeReady) return;
+    final old = route;
+    if (old != null) _engine?.releaseRoute(old.routeId);
+    route = null;
+    routePoints = const [];
+    destination = null;
+    await _closeData();
+    phase = AppPhase.loading;
+    _notify();
+    await _loadData();
+  }
+
+  /// Deletes all installed map data, then reloads (the app goes back to "needs data").
+  Future<void> deleteAllData() async {
+    final dir = data?.dir;
+    if (dir == null) return;
+    await _closeData();
+    await DataStore.deleteAll(dir);
+    await reloadData();
+  }
+
+  Future<void> _closeData() async {
+    places?.dispose();
+    places = null;
+    tiles?.dispose();
+    tiles = null;
+    tilesProblem = null;
+    usesCh = false;
+    final e = _engine;
+    _engine = null;
+    if (e != null) await e.close();
+  }
+
+  Future<void> _loadData() async {
     try {
       final d = await DataStore.check();
       data = d;
+      if (_packUrl.isNotEmpty && packs == null) {
+        final uri = Uri.tryParse(_packUrl);
+        try {
+          if (uri == null) throw PackException('bad url');
+          packs = PackManager(baseUrl: uri, dataDir: d.dir);
+        } on PackException {
+          packsProblem = 'PACK_BASE_URL must be an https address';
+        }
+      }
       if (d.hasTiles) {
         try {
           tiles = MbtilesTileProvider.open(d.tilesPath);
@@ -68,14 +123,16 @@ class AppController extends ChangeNotifier {
           places = null; // search disabled, routing still works
         }
       }
-      await _startLocation();
       if (!d.hasGraph) {
         phase = AppPhase.needsData;
         _notify();
         return;
       }
-      _engine = await PathfinderEngine.open(d.graphPath);
+      final engine = await PathfinderEngine.open(d.graphPath);
+      _engine = engine;
+      usesCh = engine.usesCh;
       phase = AppPhase.idle;
+      message = null;
     } on PathfinderException catch (e) {
       phase = AppPhase.fatal;
       message = e.message;

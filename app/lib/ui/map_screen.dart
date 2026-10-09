@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../app_controller.dart';
 import '../data/places_db.dart';
 import '../services/location_service.dart';
+import 'data_screen.dart';
 import 'panels.dart';
 import 'search_screen.dart';
 
@@ -70,6 +71,13 @@ class _MapScreenState extends State<MapScreen> {
       MaterialPageRoute(builder: (_) => SearchScreen(db: c.places)),
     );
     if (place != null) await c.chooseDestination(place);
+  }
+
+  bool get _canManageData =>
+      c.phase == AppPhase.idle || c.phase == AppPhase.needsData || c.phase == AppPhase.routeFailed || c.phase == AppPhase.fatal;
+
+  void _openData() {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DataScreen(controller: c)));
   }
 
   @override
@@ -153,9 +161,9 @@ class _MapScreenState extends State<MapScreen> {
                       else
                         _SearchBar(onTap: canPlan || c.phase == AppPhase.routeReady ? _openSearch : null),
                       const SizedBox(height: 8),
-                      Align(alignment: Alignment.centerLeft, child: _StatusChips(c: c)),
+                      Align(alignment: Alignment.centerLeft, child: _StatusChips(c: c, onData: _canManageData ? _openData : null)),
                       const Spacer(),
-                      if (navigating) NavBottomBar(c: c) else StatusPanel(c: c),
+                      if (navigating) NavBottomBar(c: c) else StatusPanel(c: c, onManageData: _canManageData ? _openData : null),
                     ],
                   ),
                 ),
@@ -209,13 +217,14 @@ class _SearchBar extends StatelessWidget {
 
 /// Small status chips: offline mode, GPS problems, map-file problems.
 class _StatusChips extends StatelessWidget {
-  const _StatusChips({required this.c});
+  const _StatusChips({required this.c, this.onData});
   final AppController c;
+  final VoidCallback? onData;
 
   @override
   Widget build(BuildContext context) {
     final chips = <Widget>[
-      const _Chip(Icons.cloud_off, 'Offline mode'),
+      _Chip(Icons.cloud_off, c.usesCh ? 'Offline mode | fast routing' : 'Offline mode', onTap: onData),
     ];
     switch (c.locationState) {
       case LocationState.denied:
@@ -235,9 +244,10 @@ class _StatusChips extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip(this.icon, this.text);
+  const _Chip(this.icon, this.text, {this.onTap});
   final IconData icon;
   final String text;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -246,13 +256,18 @@ class _Chip extends StatelessWidget {
       color: theme.colorScheme.surface,
       elevation: 1,
       borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 14),
-          const SizedBox(width: 5),
-          Text(text, style: theme.textTheme.labelMedium),
-        ]),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 14),
+            const SizedBox(width: 5),
+            Text(text, style: theme.textTheme.labelMedium),
+            if (onTap != null) ...[const SizedBox(width: 4), const Icon(Icons.chevron_right, size: 14)],
+          ]),
+        ),
       ),
     );
   }

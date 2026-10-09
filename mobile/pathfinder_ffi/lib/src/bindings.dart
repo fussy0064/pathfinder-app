@@ -35,6 +35,8 @@ class PathfinderBindings {
             Pointer<Double> Function(Pointer<Void>)>('pf_route_handle_lons'),
         handleFree = lib.lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>(
             'pf_route_handle_free'),
+        usesCh = lib.lookupFunction<Int32 Function(Pointer<Void>), int Function(Pointer<Void>)>(
+            'pf_engine_uses_ch'),
         stepCount = lib.lookupFunction<Uint32 Function(Pointer<Void>), int Function(Pointer<Void>)>(
             'pf_route_handle_step_count'),
         stepTypes = lib.lookupFunction<Pointer<Int32> Function(Pointer<Void>),
@@ -59,6 +61,7 @@ class PathfinderBindings {
   final Pointer<Double> Function(Pointer<Void>) lats;
   final Pointer<Double> Function(Pointer<Void>) lons;
   final void Function(Pointer<Void>) handleFree;
+  final int Function(Pointer<Void>) usesCh;
   final int Function(Pointer<Void>) stepCount;
   final Pointer<Int32> Function(Pointer<Void>) stepTypes;
   final Pointer<Uint32> Function(Pointer<Void>) stepPoints;

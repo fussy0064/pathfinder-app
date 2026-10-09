@@ -8,8 +8,9 @@ import 'format.dart';
 
 /// Bottom card for every state except navigation.
 class StatusPanel extends StatelessWidget {
-  const StatusPanel({super.key, required this.c});
+  const StatusPanel({super.key, required this.c, this.onManageData});
   final AppController c;
+  final VoidCallback? onManageData;
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +30,26 @@ class StatusPanel extends StatelessWidget {
               const Text('Copy map_graph.bin (and optionally tiles.mbtiles and places.db) into:'),
               const SizedBox(height: 6),
               SelectableText(c.data?.dir ?? '', style: theme.textTheme.bodySmall),
+              if (onManageData != null) ...[
+                const SizedBox(height: 12),
+                FilledButton.tonal(onPressed: onManageData, child: const Text('Map data')),
+              ],
             ],
           ),
         );
       case AppPhase.fatal:
-        return _Card(child: Text(c.message ?? 'Error', style: TextStyle(color: theme.colorScheme.error)));
+        return _Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(c.message ?? 'Error', style: TextStyle(color: theme.colorScheme.error)),
+              if (onManageData != null) ...[
+                const SizedBox(height: 12),
+                FilledButton.tonal(onPressed: onManageData, child: const Text('Map data')),
+              ],
+            ],
+          ),
+        );
       case AppPhase.routeFailed:
         return _Card(
           child: Row(

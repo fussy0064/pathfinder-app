@@ -18,10 +18,14 @@ class PathfinderEngine {
   Completer<void>? _closeDone;
   int _nextId = 0;
   int _nodeCount = 0;
+  bool _usesCh = false;
   bool _closed = false;
 
   /// Number of road nodes in the loaded graph.
   int get nodeCount => _nodeCount;
+
+  /// True when a valid map_graph.bin.ch file sits next to the graph (fast routing is active).
+  bool get usesCh => _usesCh;
 
   /// [graphPath] must be a real file on disk (not a Flutter asset path).
   /// [libraryPath] is only needed for desktop tests.
@@ -43,6 +47,7 @@ class PathfinderEngine {
         case 'ready':
           engine._commands = msg[1] as SendPort;
           engine._nodeCount = msg[2] as int;
+          engine._usesCh = (msg[3] as int) == 1;
           ready.complete();
         case 'open_error':
           ready.completeError(PathfinderException(msg[1] as int));
