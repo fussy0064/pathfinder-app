@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -fsanitize=address,undefined CMakeFiles/route_cli.dir/tools/route_cli/main.cpp.o -o route_cli  -Wl,-rpath,/home/claude/pathfinder-app/build-san libpathfinder.so 

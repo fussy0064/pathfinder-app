@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -fsanitize=address,undefined CMakeFiles/graph_info.dir/tools/graph_info/main.cpp.o -o graph_info 
