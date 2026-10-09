@@ -4,6 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <vector>
 
 #include "engine.hpp"
 #include "pathfinder.h"
@@ -15,6 +16,11 @@ struct pf_engine {
   std::mutex mu;
 };
 
+struct pf_route_handle {
+  double distance_m = 0, time_s = 0;
+  std::vector<double> lat, lon;
+};
+
 namespace {
 constexpr double kMaxSnapM = 5000.0;  // GPS point must be within 5 km of a road node
 
@@ -24,11 +30,23 @@ bool valid_coord(double lat, double lon) {
 }
 int32_t to_e7(double deg) { return static_cast<int32_t>(std::llround(deg * 1e7)); }
 void set_status(int* s, int v) { if (s) *s = v; }
+
+// Shared by both route APIs: check input, snap both points, run A*. May throw (callers catch).
+int run_query(pf_engine* e, double slat, double slon, double tlat, double tlon, pf::PathResult& r) {
+  if (!e || !valid_coord(slat, slon) || !valid_coord(tlat, tlon)) return PF_ERR_BAD_ARGS;
+  std::lock_guard<std::mutex> lock(e->mu);
+  uint32_t s = 0, t = 0;
+  double d = 0;
+  if (!e->index.nearest(to_e7(slat), to_e7(slon), kMaxSnapM, s, d)) return PF_ERR_NO_START;
+  if (!e->index.nearest(to_e7(tlat), to_e7(tlon), kMaxSnapM, t, d)) return PF_ERR_NO_TARGET;
+  r = e->router->find(s, t, true);
+  return r.found ? PF_OK : PF_ERR_NO_ROUTE;
+}
 }  // namespace
 
 extern "C" {
 
-PF_API const char* pf_version(void) { return "0.2.0"; }
+PF_API const char* pf_version(void) { return "0.3.0"; }
 
 PF_API const char* pf_status_message(int status) {
   switch (status) {
@@ -71,16 +89,10 @@ PF_API uint32_t pf_engine_node_count(const pf_engine* e) { return e ? e->graph.n
 PF_API int pf_route_find(pf_engine* e, double slat, double slon, double tlat, double tlon, pf_route* out) {
   if (!out) return PF_ERR_BAD_ARGS;
   std::memset(out, 0, sizeof(*out));
-  if (!e || !valid_coord(slat, slon) || !valid_coord(tlat, tlon)) return PF_ERR_BAD_ARGS;
   try {
-    std::lock_guard<std::mutex> lock(e->mu);
-    uint32_t s = 0, t = 0;
-    double d = 0;
-    if (!e->index.nearest(to_e7(slat), to_e7(slon), kMaxSnapM, s, d)) return PF_ERR_NO_START;
-    if (!e->index.nearest(to_e7(tlat), to_e7(tlon), kMaxSnapM, t, d)) return PF_ERR_NO_TARGET;
-    pf::PathResult r = e->router->find(s, t, true);
-    if (!r.found) return PF_ERR_NO_ROUTE;
-
+    pf::PathResult r;
+    int st = run_query(e, slat, slon, tlat, tlon, r);
+    if (st != PF_OK) return st;
     size_t cnt = r.nodes.size();
     double* lat = static_cast<double*>(std::calloc(cnt, sizeof(double)));
     double* lon = static_cast<double*>(std::calloc(cnt, sizeof(double)));
@@ -105,5 +117,39 @@ PF_API void pf_route_free(pf_route* r) {
   std::free(r->lat); std::free(r->lon);
   std::memset(r, 0, sizeof(*r));
 }
+
+PF_API int pf_route_compute(pf_engine* e, double slat, double slon, double tlat, double tlon,
+                            pf_route_handle** out) {
+  if (!out) return PF_ERR_BAD_ARGS;
+  *out = nullptr;
+  try {
+    pf::PathResult r;
+    int st = run_query(e, slat, slon, tlat, tlon, r);
+    if (st != PF_OK) return st;
+    std::unique_ptr<pf_route_handle> h(new pf_route_handle());
+    h->distance_m = static_cast<double>(r.dist_m);
+    h->time_s = r.cost_ds / 10.0;
+    h->lat.reserve(r.nodes.size());
+    h->lon.reserve(r.nodes.size());
+    for (uint32_t id : r.nodes) {
+      const pf::Node& nd = e->graph.node(id);
+      h->lat.push_back(nd.lat_e7 * 1e-7);
+      h->lon.push_back(nd.lon_e7 * 1e-7);
+    }
+    *out = h.release();
+    return PF_OK;
+  } catch (...) {
+    return PF_ERR_INTERNAL;
+  }
+}
+
+PF_API double pf_route_handle_distance_m(const pf_route_handle* h) { return h ? h->distance_m : 0.0; }
+PF_API double pf_route_handle_time_s(const pf_route_handle* h) { return h ? h->time_s : 0.0; }
+PF_API uint32_t pf_route_handle_point_count(const pf_route_handle* h) {
+  return h ? static_cast<uint32_t>(h->lat.size()) : 0;
+}
+PF_API const double* pf_route_handle_lats(const pf_route_handle* h) { return h ? h->lat.data() : nullptr; }
+PF_API const double* pf_route_handle_lons(const pf_route_handle* h) { return h ? h->lon.data() : nullptr; }
+PF_API void pf_route_handle_free(pf_route_handle* h) { delete h; }
 
 }  // extern "C"

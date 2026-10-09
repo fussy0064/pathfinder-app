@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <thread>
 #include <random>
 #include <string>
 #include <vector>
@@ -251,12 +252,56 @@ static void test_c_api() {
   unlink(p.c_str());
 }
 
+static void test_handle_api_and_threads() {
+  TG g;
+  for (int i = 0; i < 4; ++i) g.nodes.push_back({100000000, 100000000 + i * 10000});
+  add_edge(g, 0, 1, 50, true); add_edge(g, 1, 2, 50, true);
+  std::string p = tmp_path("handle.bin");
+  CHECK(write_graph(g, p));
+  int st = -1;
+  pf_engine* e = pf_engine_open(p.c_str(), &st);
+  CHECK(e != nullptr);
+
+  pf_route_handle* h = reinterpret_cast<pf_route_handle*>(0x1);
+  CHECK(pf_route_compute(e, 10.0, 10.0, 10.0, 10.002, &h) == PF_OK && h != nullptr);
+  CHECK(pf_route_handle_point_count(h) == 3);
+  CHECK(pf_route_handle_lats(h) && pf_route_handle_lons(h));
+  CHECK(std::fabs(pf_route_handle_lons(h)[2] - 10.002) < 1e-9);
+  CHECK(pf_route_handle_distance_m(h) > 200 && pf_route_handle_distance_m(h) < 240);
+  CHECK(pf_route_handle_time_s(h) > 14 && pf_route_handle_time_s(h) < 18);
+  pf_route_handle_free(h); pf_route_handle_free(nullptr);
+
+  CHECK(pf_route_compute(e, 10.0, 10.0, 10.0, 10.003, &h) == PF_ERR_NO_ROUTE && h == nullptr);
+  CHECK(pf_route_compute(e, NAN, 10.0, 10.0, 10.0, &h) == PF_ERR_BAD_ARGS && h == nullptr);
+  CHECK(pf_route_compute(e, 10.0, 10.0, 10.0, 10.0, nullptr) == PF_ERR_BAD_ARGS);
+  CHECK(pf_route_handle_point_count(nullptr) == 0 && pf_route_handle_lats(nullptr) == nullptr);
+
+  // 8 threads share one engine (calls are serialized inside)
+  std::vector<std::thread> ts;
+  std::vector<int> ok(8, 0);
+  for (int k = 0; k < 8; ++k)
+    ts.emplace_back([&, k] {
+      for (int i = 0; i < 200; ++i) {
+        pf_route_handle* hh = nullptr;
+        if (pf_route_compute(e, 10.0, 10.0, 10.0, 10.002, &hh) == PF_OK && pf_route_handle_point_count(hh) == 3) ++ok[k];
+        pf_route_handle_free(hh);
+      }
+    });
+  for (auto& t : ts) t.join();
+  bool all = true; for (int v : ok) all = all && v == 200;
+  CHECK(all);
+  std::printf("[Handle API] correct; 8 threads x 200 routes on one engine: all OK\n");
+  pf_engine_close(e);
+  unlink(p.c_str());
+}
+
 int main() {
   test_astar_vs_dijkstra();
   test_nearest();
   test_validator_and_fuzz();
   test_one_way();
   test_c_api();
+  test_handle_api_and_threads();
   std::printf("\n%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? 1 : 0;
 }

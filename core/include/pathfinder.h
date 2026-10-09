@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-#define PF_API __attribute__((visibility("default")))
+#define PF_API __attribute__((visibility("default"), used))
 
 enum {
   PF_OK = 0,
@@ -45,6 +45,19 @@ PF_API uint32_t pf_engine_node_count(const pf_engine* engine);
 PF_API int pf_route_find(pf_engine* engine, double start_lat, double start_lon,
                          double target_lat, double target_lon, pf_route* out);
 PF_API void pf_route_free(pf_route* route);
+
+/* ---- Handle API (used by Dart FFI: no struct layout to match) ----
+ * pf_route_compute fills *out with a handle on PF_OK (and NULL otherwise).
+ * Accessor pointers stay valid until pf_route_handle_free. */
+typedef struct pf_route_handle pf_route_handle;
+PF_API int pf_route_compute(pf_engine* engine, double start_lat, double start_lon,
+                            double target_lat, double target_lon, pf_route_handle** out);
+PF_API double pf_route_handle_distance_m(const pf_route_handle* h);
+PF_API double pf_route_handle_time_s(const pf_route_handle* h);
+PF_API uint32_t pf_route_handle_point_count(const pf_route_handle* h);
+PF_API const double* pf_route_handle_lats(const pf_route_handle* h);
+PF_API const double* pf_route_handle_lons(const pf_route_handle* h);
+PF_API void pf_route_handle_free(pf_route_handle* h);
 
 #ifdef __cplusplus
 }

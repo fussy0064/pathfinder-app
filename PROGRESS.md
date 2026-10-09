@@ -1,63 +1,61 @@
 # PROGRESS
 
-**Current stage: Phase 2 - DONE (waiting for your OK to start Phase 3)**
+**Current stage: Phase 3 - DONE, but see "NOT verified" below (waiting for your OK to start Phase 4)**
 
 ## Roadmap
 | Phase | Name | Status |
 |---|---|---|
 | 1 | Data pipeline + graph pre-processing | DONE |
 | 2 | C++ core pathfinding engine | DONE |
-| 3 | Mobile bridge (FFI/JNI) | NOT STARTED |
+| 3 | Mobile bridge (FFI/JNI) | DONE (needs your device test) |
 | 4 | Flutter UI + map rendering | NOT STARTED |
 | 5 | Testing, optimization, packaging | NOT STARTED |
 
-## Phase 1 (done)
-Graph format "PFGR" v1, extractor (.osm/.pbf -> map_graph.bin), validator, graph_info.
+## Phase 3 checklist
+- [x] C API v0.3.0: added handle API (`pf_route_compute` + accessors). Dart never needs to match a C struct layout
+- [x] Flutter FFI plugin `mobile/pathfinder_ffi` (Dart API, Isolate worker, bindings)
+- [x] Android build files (Gradle + CMake, 3 ABIs, 16 KB page size, hardened flags)
+- [x] iOS podspec + forwarder files
+- [x] Dart tests written (`test/pathfinder_test.dart`)
+- [x] Docs: `mobile/README.md`
+- [ ] JNI wrapper for pure Java/Kotlin (skipped: the Flutter route does not need it. Tell me if you want it)
 
-## Phase 2 checklist
-- [x] mmap loader that validates the whole file before use (`MappedGraph`)
-- [x] Spatial index: GPS -> nearest node (uniform grid, exact result)
-- [x] A* query (time as cost) + Dijkstra for checking
-- [x] `extern "C"` API (`core/include/pathfinder.h`) -> `libpathfinder.so`
-- [x] `route_cli` tool
-- [x] Tests: 5952 checks, 0 failed (also clean with ASan + UBSan)
+## What I verified here
+| Check | Result |
+|---|---|
+| C++ tests, normal build | 5965 checks, 0 failed |
+| Same tests with ASan + UBSan | 0 failed |
+| Same tests with ThreadSanitizer (8 threads, 1 engine) | 0 failed |
+| Same tests as 32-bit program (like armeabi-v7a) | 0 failed |
+| Engine cross-compiles for ARM 64-bit and ARM 32-bit | OK |
+| Shared library exports only the 14 `pf_*` functions | OK |
+| Dart files parse with a Dart parser (syntax only) | OK, 0 errors |
 
-## Test results
-- A* and Dijkstra gave the same cost on 500 random routes
-  (A* looked at 307,506 nodes, Dijkstra 412,024)
-- Nearest node matches brute force on 2000 random points
-- Fuzz: 1500 corrupted graph files -> 700 rejected, 800 loaded and queried, 0 crashes
-- Sample map demo:
-  - node1 -> node9: OK, 442 m, 35.8 s, 5 points
-  - node9 -> node1: "no route found" (one-way street)
-  - far away point: "no road near the target point"
+## NOT verified (I could not do these here)
+- Dart code was never run or type-checked: no Dart/Flutter SDK is reachable from my environment.
+- Android `.so` was never built with the real NDK, and nothing ran on a phone or emulator.
+- iOS was never built (no Mac).
+- The ARM builds above use musl, not Android's bionic library.
+Please run the steps in `mobile/README.md` on your PC. If anything fails, send me the error text and I will fix it.
 
-## C API (short)
-```
-pf_engine_open(path, &status)   pf_engine_close(e)
-pf_route_find(e, slat, slon, tlat, tlon, &route)   pf_route_free(&route)
-```
-Status codes: 0 OK, 1 bad args, 2 no start road, 3 no target road, 4 no route, 5 file, 6 invalid graph, 7 internal.
+## Security done in Phase 3
+- Coordinates are checked in Dart (`LatLng`) and again in C++
+- Graph path checked (empty / null byte)
+- Native memory is copied out and freed inside the worker (handle freed in `finally`)
+- Engine pointer lives only in the worker Isolate
+- Library exports only the `pf_*` API (hidden visibility)
+- Stack protector, RELRO / now-binding, 16 KB alignment on Android
 
-## Security done in Phase 2
-- File is validated before any use; all indexes checked
-- GPS input checked (NaN, out of range, null pointers)
-- Snap limit 5 km (point must be near a road)
-- Overflow guards on costs; path rebuild loop is bounded
-- Calls are serialized with a mutex; no exceptions cross the C boundary
-- Memory freed with `pf_route_free` (safe to call twice)
+## Known limits
+- Contraction Hierarchies and bidirectional A* not done yet (Phase 5)
+- Speed not measured on a real map yet (needs your `.pbf`)
+- GPS snaps to nearest node, not nearest road segment
+- Graph file must be a real file (copy from assets first)
+- Android build.gradle versions (AGP 8.7.3, compileSdk 35) may need a small change for your Flutter version
 
-## Known limits (honest list)
-- Contraction Hierarchies and bidirectional A* are NOT done yet. Plain A* is used.
-  Planned for Phase 5 (after we measure speed on a real city map).
-- Speed not measured on a real map yet (no .pbf available here). Needs your test file.
-- GPS snaps to the nearest node, not the nearest road segment.
-- Query memory is about 16 bytes per node (fine for city/region maps).
-- If the .bin file is changed while the app runs, it can crash (normal for mmap).
-- Linux/Android/iOS (POSIX) only. No Windows.
-
-## NEXT: Phase 3 (needs your permission)
-1. Cross-compile `libpathfinder.so` for Android (arm64-v8a, armeabi-v7a)
-2. Dart FFI bindings (Flutter plugin)
-3. Run routing in a Dart Isolate (UI never freezes)
-4. Optional JNI wrapper for pure Java/Kotlin
+## NEXT: Phase 4 (needs your permission)
+1. Flutter app shell (`app/`) using `pathfinder_ffi`
+2. Offline map tiles (MapLibre or flutter_map + .mbtiles)
+3. GPS location (`geolocator`)
+4. Search screen (SpatiaLite / SQLite)
+5. Route line on map + turn-by-turn screen

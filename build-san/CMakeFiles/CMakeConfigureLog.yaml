@@ -274,3 +274,41 @@ events:
       
       
 ...
+
+---
+events:
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake-3.28/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "/usr/share/cmake-3.28/Modules/CheckCXXSourceCompiles.cmake:52 (cmake_check_source_compiles)"
+      - "/usr/share/cmake-3.28/Modules/FindThreads.cmake:99 (CHECK_CXX_SOURCE_COMPILES)"
+      - "/usr/share/cmake-3.28/Modules/FindThreads.cmake:163 (_threads_check_libc)"
+      - "CMakeLists.txt:51 (find_package)"
+    checks:
+      - "Performing Test CMAKE_HAVE_LIBC_PTHREAD"
+    directories:
+      source: "/home/claude/pathfinder-app/build-san/CMakeFiles/CMakeScratch/TryCompile-YTTM7U"
+      binary: "/home/claude/pathfinder-app/build-san/CMakeFiles/CMakeScratch/TryCompile-YTTM7U"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "CMAKE_HAVE_LIBC_PTHREAD"
+      cached: true
+      stdout: |
+        Change Dir: '/home/claude/pathfinder-app/build-san/CMakeFiles/CMakeScratch/TryCompile-YTTM7U'
+        
+        Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_4797c/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_4797c.dir/build.make CMakeFiles/cmTC_4797c.dir/build
+        gmake[1]: Entering directory '/home/claude/pathfinder-app/build-san/CMakeFiles/CMakeScratch/TryCompile-YTTM7U'
+        Building CXX object CMakeFiles/cmTC_4797c.dir/src.cxx.o
+        /usr/bin/c++ -DCMAKE_HAVE_LIBC_PTHREAD  -std=gnu++17 -o CMakeFiles/cmTC_4797c.dir/src.cxx.o -c /home/claude/pathfinder-app/build-san/CMakeFiles/CMakeScratch/TryCompile-YTTM7U/src.cxx
+        Linking CXX executable cmTC_4797c
+        /usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_4797c.dir/link.txt --verbose=1
+        /usr/bin/c++ CMakeFiles/cmTC_4797c.dir/src.cxx.o -o cmTC_4797c 
+        gmake[1]: Leaving directory '/home/claude/pathfinder-app/build-san/CMakeFiles/CMakeScratch/TryCompile-YTTM7U'
+        
+      exitCode: 0
+...
