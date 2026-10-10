@@ -205,6 +205,10 @@ static void test_handle_api_and_threads() {
   { double o[4]; int32_t ns = -1;
     CHECK(pf_route_handle_progress(h, 10.0, 10.001, o, &ns) == PF_OK);   // at the middle node
     CHECK(std::fabs(o[0] - 110) < 3 && o[1] < 1 && std::fabs(o[2] - 110) < 3 && ns == 1);
+    CHECK(pf_route_handle_take_announce(h) == 2);   // 110 m from the end: arrival cue, delivered once
+    CHECK(pf_route_handle_take_announce(h) == 0);
+    CHECK(std::fabs(pf_route_handle_bearing_deg(h) - 90) < 1.0);
+    CHECK(pf_route_handle_take_announce(nullptr) == 0 && pf_route_handle_bearing_deg(nullptr) == 0.0);
     CHECK(pf_route_handle_progress(h, NAN, 10.0, o, &ns) == PF_ERR_BAD_ARGS);
     CHECK(pf_route_handle_progress(h, 10.0, 10.0, nullptr, &ns) == PF_ERR_BAD_ARGS); }
   pf_route_handle_free(h); pf_route_handle_free(nullptr);

@@ -80,12 +80,14 @@ void workerMain(List<Object?> init) {
         final id = msg[1] as int;
         final h = routes[msg[2] as int];
         if (h == null) {
-          reply.send(<Object?>['progress', id, kStatusBadArgs, 0.0, 0.0, 0.0, 0.0, 0]);
+          reply.send(<Object?>['progress', id, kStatusBadArgs, 0.0, 0.0, 0.0, 0.0, 0, 0, 0.0]);
           return;
         }
         final status = bindings.progress(h, msg[3] as double, msg[4] as double, out4, nextStepOut);
+        final announce = status == kStatusOk ? bindings.takeAnnounce(h) : 0;
         reply.send(<Object?>[
           'progress', id, status, out4[0], out4[1], out4[2], out4[3], nextStepOut.value,
+          announce, bindings.bearingDeg(h),
         ]);
       case 'release':
         final h = routes.remove(msg[1] as int);

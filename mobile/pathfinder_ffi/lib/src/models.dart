@@ -48,12 +48,19 @@ class RouteResult {
 
 /// Where the user is on a route (from PathfinderEngine.progress).
 class RouteProgress {
-  RouteProgress(this.alongM, this.offRouteM, this.remainingM, this.toNextM, this.nextStep);
+  RouteProgress(this.alongM, this.offRouteM, this.remainingM, this.toNextM, this.nextStep,
+      {this.announce = 0, this.bearingDeg = 0});
   final double alongM;
   final double offRouteM;
   final double remainingM;
   final double toNextM;
   final int nextStep;
+
+  /// Voice cue for the next maneuver (delivered once): 0 none, 1 about 500 m, 2 about 200 m, 3 now.
+  final int announce;
+
+  /// Direction of the road you are on (0 = north, 90 = east).
+  final double bearingDeg;
 }
 
 /// Status codes match core/include/pathfinder.h (8 is added on the Dart side).

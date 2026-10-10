@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:pathfinder_ffi/pathfinder_ffi.dart';
 
 import '../app_controller.dart';
+import '../services/guidance_text.dart';
 import 'format.dart';
 
 /// Bottom card for every state except navigation.
@@ -15,25 +15,27 @@ class StatusPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final t = c.t;
+    Widget dataButton() => Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: FilledButton.tonal(onPressed: onManageData, child: Text(t('mapData'))),
+        );
     switch (c.phase) {
       case AppPhase.loading:
-        return const _Card(child: _Busy('Loading offline data...'));
+        return _Card(child: _Busy(t('loadingData')));
       case AppPhase.calculating:
-        return const _Card(child: _Busy('CALCULATING PATH...'));
+        return _Card(child: _Busy(t('calculating')));
       case AppPhase.needsData:
         return _Card(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Map data not found', style: theme.textTheme.titleMedium),
+              Text(t('mapDataNotFound'), style: theme.textTheme.titleMedium),
               const SizedBox(height: 6),
-              const Text('Copy map_graph.bin (and optionally tiles.mbtiles and places.db) into:'),
+              Text(t('copyFilesInto')),
               const SizedBox(height: 6),
               SelectableText(c.data?.dir ?? '', style: theme.textTheme.bodySmall),
-              if (onManageData != null) ...[
-                const SizedBox(height: 12),
-                FilledButton.tonal(onPressed: onManageData, child: const Text('Map data')),
-              ],
+              if (onManageData != null) dataButton(),
             ],
           ),
         );
@@ -42,11 +44,8 @@ class StatusPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(c.message ?? 'Error', style: TextStyle(color: theme.colorScheme.error)),
-              if (onManageData != null) ...[
-                const SizedBox(height: 12),
-                FilledButton.tonal(onPressed: onManageData, child: const Text('Map data')),
-              ],
+              Text(c.message ?? t('errUnknown'), style: TextStyle(color: theme.colorScheme.error)),
+              if (onManageData != null) dataButton(),
             ],
           ),
         );
@@ -56,22 +55,23 @@ class StatusPanel extends StatelessWidget {
             children: [
               Icon(Icons.error_outline, color: theme.colorScheme.error),
               const SizedBox(width: 12),
-              Expanded(child: Text(c.message ?? 'No route')),
-              TextButton(onPressed: c.clearRoute, child: const Text('Dismiss')),
+              Expanded(child: Text(c.message ?? t('errNoRoute'))),
+              TextButton(onPressed: c.clearRoute, child: Text(t('dismiss'))),
             ],
           ),
         );
       case AppPhase.routeReady:
         final r = c.route!;
+        final ms = c.calcMillis;
         return _Card(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('PATH FOUND: ${formatDuration(r.timeS)}', style: theme.textTheme.titleLarge),
+              Text(t('pathFound', {'time': formatDuration(t, r.timeS)}), style: theme.textTheme.titleLarge),
               const SizedBox(height: 2),
               Text(
-                '${formatDistance(r.distanceM)} to ${c.destination?.name ?? 'destination'}'
-                '${c.calcMillis != null ? '  (calculated in ${c.calcMillis} ms)' : ''}',
+                t('distanceTo', {'dist': formatDistance(r.distanceM), 'place': c.destination?.name ?? ''}) +
+                    (ms != null ? '  (${t('calculatedIn', {'ms': '$ms'})})' : ''),
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
@@ -81,11 +81,11 @@ class StatusPanel extends StatelessWidget {
                     child: FilledButton.icon(
                       onPressed: c.startNavigation,
                       icon: const Icon(Icons.navigation),
-                      label: const Text('Start'),
+                      label: Text(t('start')),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  OutlinedButton(onPressed: c.clearRoute, child: const Text('Cancel')),
+                  OutlinedButton(onPressed: c.clearRoute, child: Text(t('cancel'))),
                 ],
               ),
             ],
@@ -97,8 +97,8 @@ class StatusPanel extends StatelessWidget {
             children: [
               const Icon(Icons.flag),
               const SizedBox(width: 12),
-              Expanded(child: Text('You have arrived', style: theme.textTheme.titleMedium)),
-              FilledButton(onPressed: c.clearRoute, child: const Text('Done')),
+              Expanded(child: Text(t('arrived'), style: theme.textTheme.titleMedium)),
+              FilledButton(onPressed: c.clearRoute, child: Text(t('done'))),
             ],
           ),
         );
@@ -138,7 +138,7 @@ class NavBanner extends StatelessWidget {
                 children: [
                   Text(formatDistance(dist),
                       style: theme.textTheme.headlineSmall?.copyWith(color: theme.colorScheme.onPrimary)),
-                  Text(turnText(step.type),
+                  Text(turnText(c.t, step.type),
                       style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onPrimary)),
                 ],
               ),
@@ -160,6 +160,7 @@ class NavBottomBar extends StatelessWidget {
     final r = c.route;
     if (r == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
+    final t = c.t;
     final total = r.distanceM <= 0 ? 1.0 : r.distanceM;
     final pr = c.progress;
     final remaining = pr?.remainingM ?? r.distanceM;
@@ -179,12 +180,12 @@ class NavBottomBar extends StatelessWidget {
                     ? Row(children: [
                         const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                         const SizedBox(width: 10),
-                        Text('Rerouting...', style: theme.textTheme.titleMedium),
+                        Text(t('rerouting'), style: theme.textTheme.titleMedium),
                       ])
-                    : Text('${formatDuration(etaSeconds)}  |  ${formatDistance(remaining)}',
+                    : Text('${formatDuration(t, etaSeconds)}  |  ${formatDistance(remaining)}',
                         style: theme.textTheme.titleMedium),
               ),
-              OutlinedButton(onPressed: c.clearRoute, child: const Text('End')),
+              OutlinedButton(onPressed: c.clearRoute, child: Text(t('end'))),
             ],
           ),
         ],

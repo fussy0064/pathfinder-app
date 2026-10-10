@@ -26,6 +26,8 @@ struct pf_route_handle {
       : distance_m(d), time_s(t), nav(std::move(la), std::move(lo)) {}
   double distance_m, time_s;
   pf::NavRoute nav;
+  int32_t pending_announce = 0;
+  double last_bearing = 0;
 };
 
 namespace {
@@ -53,7 +55,7 @@ int run_query(pf_engine* e, double slat, double slon, double tlat, double tlon, 
 
 extern "C" {
 
-PF_API const char* pf_version(void) { return "0.5.0"; }
+PF_API const char* pf_version(void) { return "0.6.0"; }
 
 PF_API const char* pf_status_message(int status) {
   switch (status) {
@@ -186,10 +188,21 @@ PF_API int pf_route_handle_progress(pf_route_handle* h, double lat, double lon, 
     pf::Progress p = h->nav.update(lat, lon);
     out4[0] = p.along_m; out4[1] = p.off_m; out4[2] = p.remaining_m; out4[3] = p.to_next_m;
     *next_step = p.next_step;
+    if (p.announce != 0) h->pending_announce = p.announce;
+    h->last_bearing = p.bearing_deg;
     return PF_OK;
   } catch (...) {
     return PF_ERR_INTERNAL;
   }
 }
+
+PF_API int pf_route_handle_take_announce(pf_route_handle* h) {
+  if (!h) return 0;
+  int v = h->pending_announce;
+  h->pending_announce = 0;
+  return v;
+}
+
+PF_API double pf_route_handle_bearing_deg(const pf_route_handle* h) { return h ? h->last_bearing : 0.0; }
 
 }  // extern "C"

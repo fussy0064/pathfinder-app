@@ -75,7 +75,8 @@ class PathfinderEngine {
             c.completeError(PathfinderException(status));
           } else {
             c.complete(RouteProgress(msg[3] as double, msg[4] as double, msg[5] as double,
-                msg[6] as double, msg[7] as int));
+                msg[6] as double, msg[7] as int,
+                announce: msg[8] as int, bearingDeg: msg[9] as double));
           }
         case 'closed':
           engine._closeDone?.complete();

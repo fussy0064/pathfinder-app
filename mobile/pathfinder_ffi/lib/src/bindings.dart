@@ -45,6 +45,10 @@ class PathfinderBindings {
             Pointer<Uint32> Function(Pointer<Void>)>('pf_route_handle_step_points'),
         stepDists = lib.lookupFunction<Pointer<Double> Function(Pointer<Void>),
             Pointer<Double> Function(Pointer<Void>)>('pf_route_handle_step_dists'),
+        takeAnnounce = lib.lookupFunction<Int32 Function(Pointer<Void>), int Function(Pointer<Void>)>(
+            'pf_route_handle_take_announce'),
+        bearingDeg = lib.lookupFunction<Double Function(Pointer<Void>), double Function(Pointer<Void>)>(
+            'pf_route_handle_bearing_deg'),
         progress = lib.lookupFunction<
             Int32 Function(Pointer<Void>, Double, Double, Pointer<Double>, Pointer<Int32>),
             int Function(Pointer<Void>, double, double, Pointer<Double>,
@@ -66,5 +70,7 @@ class PathfinderBindings {
   final Pointer<Int32> Function(Pointer<Void>) stepTypes;
   final Pointer<Uint32> Function(Pointer<Void>) stepPoints;
   final Pointer<Double> Function(Pointer<Void>) stepDists;
+  final int Function(Pointer<Void>) takeAnnounce;
+  final double Function(Pointer<Void>) bearingDeg;
   final int Function(Pointer<Void>, double, double, Pointer<Double>, Pointer<Int32>) progress;
 }

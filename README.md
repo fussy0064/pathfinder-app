@@ -18,6 +18,7 @@ tools/ch_builder  map_graph.bin -> map_graph.bin.ch (fast routing index)
 tools/make_pack.py  build a downloadable pack + catalog.json
 tools/bench, tools/bench/bench_map.cpp  speed tests
 docs/           SECURITY.md, PACKS.md, RELEASE.md
+Settings: English/Kiswahili, voice guidance, heading-up map, optional DeepSeek AI search (see app/README.md)
 data/sample/    tiny.osm test map
 PROGRESS.md     where we are + what is next
 ```

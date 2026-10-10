@@ -1,6 +1,6 @@
 # PROGRESS
 
-**Current stage: Phase 5 - code and docs DONE. Two things need YOU (see "Needs you").**
+**Current stage: Phase 5 DONE + extra features (voice, Swahili, heading-up map, DeepSeek AI search) written. Two things need YOU (see "Needs you").**
 
 ## Roadmap
 | Phase | Name | Status |
@@ -18,6 +18,20 @@
    Either (a) edit the token and tick `workflow`, then tell me, or (b) on github.com create `.github/workflows/ci.yml` and paste the file.
    With (a) I can read the results and fix errors myself. Otherwise follow `app/README.md` and `docs/RELEASE.md` on your PC.
 2. **Revoke the GitHub token** when finished (it was pasted into chat).
+
+## Extra features requested after Phase 5
+- [x] Voice guidance: engine decides WHEN to speak (about 500 m, 200 m, now; once per level, rising only) - C++, tested
+- [x] English + Kiswahili for every screen, instruction and voice phrase (114 text entries, checked for matching keys and placeholders)
+- [x] Heading-up map rotation (road direction on the route, GPS direction otherwise), north-up toggle, direction arrow
+- [x] Settings screen: language, voice on/off + test, rotation, DeepSeek AI (off by default, key in secure storage)
+- [x] DeepSeek AI search: typed words -> place kinds/names (allow-listed) -> offline database; only the typed words are sent
+- [x] Docs: `docs/SECURITY.md` (AI + voice section), `docs/RELEASE.md` (permissions, voice and AI checks), `app/README.md`
+
+Verified here: voice-cue logic (48 nav checks incl. new cue/bearing tests, also under ASan/UBSan); real Monaco route driven in 5 m steps:
+22 cues for 12 maneuvers, levels only rise, 0 duplicates, ends at 0 m; English/Swahili tables consistent; nearest-of-kind SQL (Python); all 6 test suites pass; Dart syntax of all 29 files.
+NOT verified: the Dart code and its new tests (phrases, heading, DeepSeek client against a local fake server) were never run; real TTS voices (no Swahili voice tested);
+heading-up rotation direction (sign could not be checked without a device); the real DeepSeek service (my sandbox cannot reach it, request format from memory);
+Swahili wording was written by me, not a native speaker. Known small issue: "Navigation started" can be cut off by an immediate turn cue.
 
 ## Phase 5 checklist
 - [x] Contraction Hierarchies index: `build/ch_builder map_graph.bin` -> `map_graph.bin.ch`; engine uses it automatically, falls back to A*

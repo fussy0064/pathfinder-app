@@ -5,8 +5,8 @@ import 'package:sqlite3/sqlite3.dart';
 class Place {
   Place({required this.id, required this.name, required this.kind, required this.lat, required this.lon});
 
-  factory Place.dropped(double lat, double lon) =>
-      Place(id: -1, name: 'Dropped pin', kind: 'pin', lat: lat, lon: lon);
+  factory Place.dropped(double lat, double lon, [String name = 'Dropped pin']) =>
+      Place(id: -1, name: name, kind: 'pin', lat: lat, lon: lon);
 
   final int id;
   final String name;
@@ -56,6 +56,35 @@ class PlacesDb {
     if (q.length > 80) q = q.substring(0, 80);
     final e = escapeLike(q);
     final rows = _db.select(_sql, ['%$e%', '$e%', math.min(50, math.max(1, limit))]);
+    return [
+      for (final r in rows)
+        Place(
+          id: r['id'] as int,
+          name: r['name'] as String,
+          kind: r['kind'] as String,
+          lat: (r['lat'] as num).toDouble(),
+          lon: (r['lon'] as num).toDouble(),
+        ),
+    ];
+  }
+
+  /// Same SQL is tested in tests/test_places.py. [n] = number of kinds, [near] = order by distance.
+  static String kindsSql(int n, bool near) =>
+      'SELECT id, name, kind, lat, lon FROM places WHERE kind IN (${List.filled(n, '?').join(',')}) '
+      'ORDER BY ${near ? '((lat - ?) * (lat - ?) + ((lon - ?) * ?) * ((lon - ?) * ?))' : 'name_norm'} LIMIT ?';
+
+  /// Places of the given kinds (e.g. 'amenity:pharmacy'), nearest first when a position is given.
+  List<Place> searchByKinds(List<String> kinds, {double? nearLat, double? nearLon, int limit = 10}) {
+    if (_closed || kinds.isEmpty) return const [];
+    final ks = kinds.length > 5 ? kinds.sublist(0, 5) : kinds;
+    final near = nearLat != null && nearLon != null && nearLat.isFinite && nearLon.isFinite;
+    final params = <Object?>[...ks];
+    if (near) {
+      final c = math.cos(nearLat * math.pi / 180);
+      params.addAll([nearLat, nearLat, nearLon, c, nearLon, c]);
+    }
+    params.add(math.min(50, math.max(1, limit)));
+    final rows = _db.select(kindsSql(ks.length, near), params);
     return [
       for (final r in rows)
         Place(

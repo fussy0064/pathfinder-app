@@ -15,9 +15,30 @@ Scope: this repo as of Phase 5. "Tested" = an automated test in this repo covers
 | Half-installed data | Download to `.download/`, verify all, then move; graph moved last; stale `.ch` removed | Dart tests written |
 | Location privacy | No network code in the routing/navigation path. Location never leaves the phone. | Reviewed |
 | Network exposure | No INTERNET permission unless you want the downloader (see RELEASE.md). Cleartext off, backups off. | Reviewed |
-| Native hardening | Stack protector, RELRO + BIND_NOW, hidden symbols (only the 20 `pf_*` functions exported), 16 KB pages | Reviewed |
+| Native hardening | Stack protector, RELRO + BIND_NOW, hidden symbols (only the 22 `pf_*` functions exported), 16 KB pages | Reviewed |
 | Concurrency | One mutex per engine; TSan run with 8 threads: clean | Tested |
 | Secrets in git | `.gitignore` blocks keys, keystores, `.env`, `key.properties` | Reviewed |
+
+## Optional DeepSeek AI search (off by default)
+What it does: you type "nearest pharmacy" or "duka la dawa karibu"; DeepSeek returns place kinds / keywords; the OFFLINE database finds the places.
+
+| Question | Answer |
+|---|---|
+| What is sent to DeepSeek? | Only the words you typed (max 200 characters) plus a fixed instruction text. |
+| What is never sent? | Your location, routes, destination, map data, device info. Tested: the Dart test checks the request body for coordinates and the key. |
+| Where does the API key live? | Android Keystore / iOS Keychain through flutter_secure_storage. Not in the code, not in the repo, never logged, never in error text. You type it in Settings. |
+| Is the answer trusted? | No. Kinds must be in a fixed list of 29; names are stripped to letters, digits, space and `- ' .`; the search uses parameterized SQL. A hostile answer can at most pick a wrong search word. |
+| Transport | https to `api.deepseek.com` only (other hosts rejected), no redirects, 20 s timeouts, 64 KB response limit. |
+| Cost / abuse | You use your own key, so DeepSeek bills your account. The app sends one request per tap on "Ask AI". |
+| Permission | Needs the INTERNET permission (see RELEASE.md). Without it the button shows "No internet connection". |
+
+Risks to understand: your typed words go to a third-party company. I did not check where DeepSeek stores data or how long;
+read DeepSeek's privacy policy and terms before you turn this on or ship it to other people. If you publish the app, say so in your privacy policy.
+Not tested against the real service (my sandbox cannot reach api.deepseek.com); the request format follows DeepSeek's OpenAI-style chat API from memory. Check it against their current docs.
+
+## Voice guidance
+Speech uses the phone's own text-to-speech engine. No text is sent by this app. Some phone voices (for example Google's) may fetch voice data over the network when a voice is installed.
+A Swahili voice must be installed on the phone. If none is found, the app says so and still shows text instructions.
 
 ## Known gaps (not fixed)
 1. **The catalog is not signed.** Its integrity relies on HTTPS and on trusting your server. If the server is hacked, an attacker can publish a bad pack with matching hashes. Fix later: sign `catalog.json` (Ed25519) and pin the public key in the app.
@@ -25,7 +46,8 @@ Scope: this repo as of Phase 5. "Tested" = an automated test in this repo covers
 3. **SQLite files from the server are parsed by SQLite** (`places.db`, `tiles.mbtiles`). They are opened read-only and hash-checked, but a malicious file that passes your own hash check could target SQLite bugs. Only host packs you built yourself.
 4. **mmap and file changes:** if another program truncates `map_graph.bin` while the app runs, the app can crash (SIGBUS). Normal for mmap.
 5. **No tamper/root detection.** Not needed for a free offline app, but note it.
-6. **Dart and Android code has not been compiled or run by me** (no SDK here). Security claims for Dart code are from review plus the tests I wrote; run them.
+6. **Swahili text was written by me, not a native speaker.** Have someone review `app/lib/l10n/strings.dart` (voice phrases especially).
+7. **Dart and Android code has not been compiled or run by me** (no SDK here). Security claims for Dart code are from review plus the tests I wrote; run them.
 
 ## Housekeeping found during this review
 - Build folders (`build-san`, `build-tsan`) were accidentally committed in earlier phases. They are now removed from git and ignored. They remain in old git history (about 6 MB, no secrets).

@@ -126,6 +126,14 @@ Progress NavRoute::update(double lat, double lon) {
   for (int32_t s = 1; s <= last_step; ++s)
     if (cum_[steps_.point[s]] > p.along_m + 0.5) { p.next_step = s; break; }
   p.to_next_m = std::max(0.0, cum_[steps_.point[p.next_step]] - p.along_m);
+  p.bearing_deg = bearing_deg(lat_[chosen], lon_[chosen], lat_[chosen + 1], lon_[chosen + 1]);
+
+  // Voice cues: each step is announced at most once per level, and only when the level rises.
+  int level = 0;
+  if (steps_.type[p.next_step] == TURN_ARRIVE) level = p.to_next_m <= 200.0 ? 2 : 0;
+  else level = p.to_next_m <= 50.0 ? 3 : (p.to_next_m <= 200.0 ? 2 : (p.to_next_m <= 500.0 ? 1 : 0));
+  if (p.next_step != announced_step_) { announced_step_ = p.next_step; announced_level_ = 0; }
+  if (level > announced_level_) { announced_level_ = level; p.announce = level; }
   return p;
 }
 

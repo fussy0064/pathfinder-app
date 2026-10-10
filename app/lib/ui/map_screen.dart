@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -8,6 +10,7 @@ import '../services/location_service.dart';
 import 'data_screen.dart';
 import 'panels.dart';
 import 'search_screen.dart';
+import 'settings_screen.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key, required this.controller});
@@ -21,6 +24,7 @@ class _MapScreenState extends State<MapScreen> {
   final MapController _map = MapController();
   bool _centeredOnUser = false;
   bool _centeredOnData = false;
+  bool _wasNavigating = false;
   int? _fittedRouteId;
 
   AppController get c => widget.controller;
@@ -38,13 +42,22 @@ class _MapScreenState extends State<MapScreen> {
     super.dispose();
   }
 
+  bool get _headingUpActive => c.settings.headingUp && c.heading != null;
+
   // Moves the camera. The map may not be ready on the first calls, so failures are retried later.
   void _onChange() {
     try {
       final user = c.user;
       if (c.phase == AppPhase.navigating && user != null) {
-        _map.move(user, 17.5); // follow the user
+        // Heading-up: rotate the map by -heading so the way you travel points to the top of the screen.
+        final rotation = _headingUpActive ? -c.heading! : 0.0;
+        _map.moveAndRotate(user, 17.5, rotation);
+        _wasNavigating = true;
         return;
+      }
+      if (_wasNavigating) {
+        _map.rotate(0); // back to north-up when navigation ends
+        _wasNavigating = false;
       }
       if (!_centeredOnUser && user != null) {
         _map.move(user, 15);
@@ -68,7 +81,7 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _openSearch() async {
     final place = await Navigator.of(context).push<Place>(
-      MaterialPageRoute(builder: (_) => SearchScreen(db: c.places)),
+      MaterialPageRoute(builder: (_) => SearchScreen(controller: c)),
     );
     if (place != null) await c.chooseDestination(place);
   }
@@ -80,15 +93,21 @@ class _MapScreenState extends State<MapScreen> {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => DataScreen(controller: c)));
   }
 
+  void _openSettings() {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SettingsScreen(controller: c)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: c,
       builder: (context, _) {
         final theme = Theme.of(context);
+        final t = c.t;
         final navigating = c.phase == AppPhase.navigating;
         final tiles = c.tiles;
         final canPlan = c.phase == AppPhase.idle || c.phase == AppPhase.routeFailed;
+        final headingUp = navigating && _headingUpActive;
         return Scaffold(
           body: Stack(
             children: [
@@ -104,7 +123,7 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                   onLongPress: (_, point) {
                     if (canPlan || c.phase == AppPhase.routeReady) {
-                      c.chooseDestination(Place.dropped(point.latitude, point.longitude));
+                      c.chooseDestination(Place.dropped(point.latitude, point.longitude, t('droppedPin')));
                     }
                   },
                 ),
@@ -133,20 +152,18 @@ class _MapScreenState extends State<MapScreen> {
                         width: 40,
                         height: 40,
                         alignment: Alignment.topCenter,
+                        rotate: true, // stay upright when the map rotates
                         child: Icon(Icons.location_on, size: 40, color: Colors.red.shade700),
                       ),
                     if (c.user != null)
                       Marker(
                         point: c.user!,
-                        width: 24,
-                        height: 24,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                          ),
-                        ),
+                        width: 36,
+                        height: 36,
+                        rotate: headingUp, // heading-up: arrow stays pointing to the top of the screen
+                        child: navigating
+                            ? _Arrow(angleDeg: headingUp ? 0 : (c.heading ?? 0), color: theme.colorScheme.primary)
+                            : _Dot(color: theme.colorScheme.primary),
                       ),
                   ]),
                 ],
@@ -159,7 +176,20 @@ class _MapScreenState extends State<MapScreen> {
                       if (navigating)
                         NavBanner(c: c)
                       else
-                        _SearchBar(onTap: canPlan || c.phase == AppPhase.routeReady ? _openSearch : null),
+                        Row(children: [
+                          Expanded(child: _SearchBar(label: t('whereTo'), onTap: canPlan || c.phase == AppPhase.routeReady ? _openSearch : null)),
+                          const SizedBox(width: 8),
+                          Material(
+                            color: theme.colorScheme.surface,
+                            elevation: 3,
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              tooltip: t('settings'),
+                              icon: const Icon(Icons.settings),
+                              onPressed: _openSettings,
+                            ),
+                          ),
+                        ]),
                       const SizedBox(height: 8),
                       Align(alignment: Alignment.centerLeft, child: _StatusChips(c: c, onData: _canManageData ? _openData : null)),
                       const Spacer(),
@@ -170,24 +200,81 @@ class _MapScreenState extends State<MapScreen> {
               ),
             ],
           ),
-          floatingActionButton: navigating || c.user == null
-              ? null
-              : Padding(
-                  padding: EdgeInsets.only(bottom: c.phase == AppPhase.idle ? 0 : 150),
-                  child: FloatingActionButton.small(
-                    tooltip: 'My location',
-                    onPressed: () => _map.move(c.user!, 16),
-                    child: const Icon(Icons.my_location),
-                  ),
-                ),
+          floatingActionButton: _buildFabs(navigating),
         );
       },
     );
   }
+
+  Widget? _buildFabs(bool navigating) {
+    final s = c.settings;
+    final tr = c.t;
+    if (navigating) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 120),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          FloatingActionButton.small(
+            heroTag: 'voice',
+            tooltip: s.voiceOn ? tr('voiceOnTip') : tr('voiceOffTip'),
+            onPressed: () => s.setVoiceOn(!s.voiceOn),
+            child: Icon(s.voiceOn ? Icons.volume_up : Icons.volume_off),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton.small(
+            heroTag: 'rotate',
+            tooltip: s.headingUp ? tr('headingUpTip') : tr('northUpTip'),
+            onPressed: () => s.setHeadingUp(!s.headingUp),
+            child: Icon(s.headingUp ? Icons.navigation : Icons.explore),
+          ),
+        ]),
+      );
+    }
+    if (c.user == null) return null;
+    return Padding(
+      padding: EdgeInsets.only(bottom: c.phase == AppPhase.idle ? 0 : 150),
+      child: FloatingActionButton.small(
+        heroTag: 'locate',
+        tooltip: tr('myLocation'),
+        onPressed: () => _map.move(c.user!, 16),
+        child: const Icon(Icons.my_location),
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot({required this.color});
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 3),
+          ),
+        ),
+      );
+}
+
+class _Arrow extends StatelessWidget {
+  const _Arrow({required this.angleDeg, required this.color});
+  final double angleDeg;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Transform.rotate(
+        angle: angleDeg * math.pi / 180,
+        child: Icon(Icons.navigation, size: 34, color: color, shadows: const [Shadow(color: Colors.white, blurRadius: 6)]),
+      );
 }
 
 class _SearchBar extends StatelessWidget {
-  const _SearchBar({required this.onTap});
+  const _SearchBar({required this.label, required this.onTap});
+  final String label;
   final VoidCallback? onTap;
 
   @override
@@ -206,7 +293,7 @@ class _SearchBar extends StatelessWidget {
             children: [
               Icon(Icons.search, color: theme.colorScheme.outline),
               const SizedBox(width: 10),
-              Text('Where to?', style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.outline)),
+              Text(label, style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.outline)),
             ],
           ),
         ),
@@ -223,22 +310,24 @@ class _StatusChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = c.t;
     final chips = <Widget>[
-      _Chip(Icons.cloud_off, c.usesCh ? 'Offline mode | fast routing' : 'Offline mode', onTap: onData),
+      _Chip(Icons.cloud_off, c.usesCh ? '${t('offlineMode')} | ${t('fastRouting')}' : t('offlineMode'), onTap: onData),
     ];
     switch (c.locationState) {
       case LocationState.denied:
       case LocationState.deniedForever:
-        chips.add(const _Chip(Icons.location_disabled, 'Location permission needed'));
+        chips.add(_Chip(Icons.location_disabled, t('locationNeeded')));
       case LocationState.serviceOff:
-        chips.add(const _Chip(Icons.location_off, 'GPS is off'));
+        chips.add(_Chip(Icons.location_off, t('gpsOff')));
       case LocationState.ready:
-        if (c.user == null) chips.add(const _Chip(Icons.gps_not_fixed, 'Waiting for GPS'));
+        if (c.user == null) chips.add(_Chip(Icons.gps_not_fixed, t('waitingGps')));
       case LocationState.unknown:
         break;
     }
-    if (c.tilesProblem != null) chips.add(_Chip(Icons.map_outlined, c.tilesProblem!));
-    if (c.data != null && !c.data!.hasTiles) chips.add(const _Chip(Icons.map_outlined, 'No map tiles'));
+    if (c.tilesProblemKey != null) chips.add(_Chip(Icons.map_outlined, t(c.tilesProblemKey!)));
+    if (c.data != null && !c.data!.hasTiles) chips.add(_Chip(Icons.map_outlined, t('noTiles')));
+    if (c.settings.voiceOn && !c.voiceAvailable) chips.add(_Chip(Icons.volume_off, t('voiceMissingShort', {'lang': t.languageName})));
     return Wrap(spacing: 6, runSpacing: 4, children: chips);
   }
 }

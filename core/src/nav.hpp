@@ -21,6 +21,8 @@ struct Progress {
   double remaining_m = 0;  // distance still to go
   double to_next_m = 0;    // distance to the next maneuver
   int32_t next_step = 0;   // index into Steps
+  int32_t announce = 0;    // voice cue for next_step: 0 none, 1 = ~500 m, 2 = ~200 m, 3 = now (<= 50 m)
+  double bearing_deg = 0;  // direction of the road segment you are on (0 = north, 90 = east)
 };
 
 double bearing_deg(double lat1, double lon1, double lat2, double lon2);
@@ -40,6 +42,8 @@ class NavRoute {
   std::vector<double> lat_, lon_, cum_;
   Steps steps_;
   double last_along_ = 0;
+  int32_t announced_step_ = -1;   // voice: which step was last announced, and at which level
+  int32_t announced_level_ = 0;
 };
 
 }  // namespace pf

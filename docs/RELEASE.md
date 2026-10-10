@@ -25,13 +25,13 @@ storeFile=/home/you/pathfinder-release.jks
 In `app/android/app/build.gradle.kts`, load it and use it for `release` (standard Flutter signing guide:
 https://docs.flutter.dev/deployment/android#sign-the-app). If you lose the key you cannot update the app on Google Play.
 
-## 3. Network permission (only if you use the downloader)
-The app has NO internet permission by default. To use in-app downloads add, in
+## 3. Network permission (only for the downloader and/or DeepSeek AI search)
+The app has NO internet permission by default. Routing, search, voice and maps all work without it. To use in-app downloads or AI search add, in
 `android/app/src/main/AndroidManifest.xml` (inside `<manifest>`):
 ```xml
 <uses-permission android:name="android.permission.INTERNET"/>
 ```
-Skip this and copy data files by hand (or `adb push`) to keep the app fully offline.
+Skip this and copy data files by hand (or `adb push`) to keep the app fully offline (AI search then shows "No internet connection").
 
 ## 4. Build
 ```
@@ -45,6 +45,9 @@ Keep `build/symbols` (needed to read crash reports). Output: `build/app/outputs/
 - `unzip -l app-release.apk | grep libpathfinder` shows arm64-v8a, armeabi-v7a, x86_64 (apk built without `--split-per-abi`).
 - 16 KB pages: `zipalign -c -P 16 -v 4 app-release.apk` (Android SDK build-tools 35+).
 - Test on a real phone: GPS fix, search, route, turn banner, reroute (drive or walk off the route), airplane mode.
+- Voice: install an English and a Swahili text-to-speech voice (phone Settings > Text-to-speech), switch language in the app, tap "Test voice", then walk a route and listen for "In 200 meters, turn left" / "Baada ya mita 200, geuka kushoto".
+- Heading-up: while walking/driving the map should turn so your direction points up. If it turns the wrong way, tell me (the rotation sign could not be checked without a device).
+- AI search (only if INTERNET is added): Settings > turn on, paste your DeepSeek key, "Test connection", then search "nearest pharmacy" and "duka la dawa".
 - Run `ctest` (C++/Python) and `flutter test` in `app/` and `mobile/pathfinder_ffi/`.
 - Privacy text for the store: location is used on the device only and is never sent anywhere.
 - Review `docs/SECURITY.md` known gaps.

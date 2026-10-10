@@ -56,6 +56,12 @@ flutter test                 # format/search helper tests
 flutter build apk --release
 ```
 
+## Voice, languages, map rotation, AI (Settings button, top right)
+- **Languages:** English and Kiswahili. Starts in the phone language; change it in Settings. All screens, instructions and voice phrases switch. (Download error details from the server stay in English.)
+- **Voice guidance:** speaks at about 500 m, 200 m and "now", plus "Navigation started", "Rerouting" and "You have arrived". Uses the phone's text-to-speech, so a Swahili voice must be installed on the phone. Mute button on the navigation screen.
+- **Heading-up:** while navigating the map rotates so your direction points up (uses the road direction on the route, GPS direction otherwise). Toggle with the compass button; off = north-up.
+- **AI search (DeepSeek, optional, off by default):** in Settings turn it on and paste your own DeepSeek API key. In the search screen tap the sparkle button to ask in plain words ("nearest pharmacy", "duka la dawa karibu"). Needs the INTERNET permission. Only the typed words are sent. Read `docs/SECURITY.md` first.
+
 ## How it works
 - With `map_graph.bin.ch` present the engine uses Contraction Hierarchies (under 2 ms in my tests); otherwise A*. The chip says "fast routing" when active.
 - Search: SQLite `LIKE` on `places.db` (typed text is escaped, so `%` and `_` are plain characters).

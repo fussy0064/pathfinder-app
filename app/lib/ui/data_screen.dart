@@ -44,7 +44,7 @@ class _DataScreenState extends State<DataScreen> {
       }
       await c.reloadData();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${pack.name} installed')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(c.t('installedOk', {'name': pack.name}))));
     } on PackException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -62,11 +62,11 @@ class _DataScreenState extends State<DataScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete all map data?'),
-        content: const Text('Roads, search and map tiles will be removed from this phone. You can download them again.'),
+        title: Text(c.t('deleteTitle')),
+        content: Text(c.t('deleteBody')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(c.t('cancel'))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(c.t('delete'))),
         ],
       ),
     );
@@ -86,22 +86,22 @@ class _DataScreenState extends State<DataScreen> {
       builder: (context, _) {
         final d = c.data;
         return Scaffold(
-          appBar: AppBar(title: const Text('Map data')),
+          appBar: AppBar(title: Text(c.t('mapData'))),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('Installed', style: theme.textTheme.titleMedium),
+              Text(c.t('installed'), style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
-              _Row('Road graph (routing)', d?.hasGraph ?? false),
-              _Row('Fast routing index', c.usesCh, note: c.usesCh ? 'active' : 'not installed, using A*'),
-              _Row('Place search', d?.hasPlaces ?? false),
-              _Row('Map tiles', d?.hasTiles ?? false),
+              _Row(c.t('roadGraph'), d?.hasGraph ?? false),
+              _Row(c.t('fastIndex'), c.usesCh, note: c.usesCh ? c.t('active') : c.t('notInstalledAstar')),
+              _Row(c.t('placeSearch'), d?.hasPlaces ?? false),
+              _Row(c.t('mapTiles'), d?.hasTiles ?? false),
               if (d != null) ...[
                 const SizedBox(height: 8),
                 SelectableText(d.dir, style: theme.textTheme.bodySmall),
               ],
               const Divider(height: 32),
-              Text('Download', style: theme.textTheme.titleMedium),
+              Text(c.t('download'), style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
               ..._downloadSection(theme),
               const Divider(height: 32),
@@ -110,7 +110,7 @@ class _DataScreenState extends State<DataScreen> {
                 child: TextButton.icon(
                   onPressed: _installingId == null ? _confirmDelete : null,
                   icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
-                  label: Text('Delete all map data', style: TextStyle(color: theme.colorScheme.error)),
+                  label: Text(c.t('deleteAll'), style: TextStyle(color: theme.colorScheme.error)),
                 ),
               ),
             ],
@@ -123,11 +123,7 @@ class _DataScreenState extends State<DataScreen> {
   List<Widget> _downloadSection(ThemeData theme) {
     if (c.packs == null) {
       return [
-        Text(
-          c.packsProblem ??
-              'No download server is set up in this build.\nCopy the files into the folder above, or build the app with '
-                  '--dart-define=PACK_BASE_URL=https://your-server/packs/',
-        ),
+        Text(c.packsProblemKey != null ? c.t(c.packsProblemKey!) : c.t('noServer')),
       ];
     }
     return [
@@ -141,14 +137,14 @@ class _DataScreenState extends State<DataScreen> {
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) return const LinearProgressIndicator();
           if (snap.hasError) {
-            final msg = snap.error is PackException ? (snap.error as PackException).message : 'Could not load the list';
+            final msg = snap.error is PackException ? (snap.error as PackException).message : c.t('listFailed');
             return Row(children: [
               Expanded(child: Text(msg, style: TextStyle(color: theme.colorScheme.error))),
-              TextButton(onPressed: () => setState(() => _catalog = c.packs?.fetchCatalog()), child: const Text('Retry')),
+              TextButton(onPressed: () => setState(() => _catalog = c.packs?.fetchCatalog()), child: Text(c.t('retry'))),
             ]);
           }
           final packs = snap.data ?? const <PackInfo>[];
-          if (packs.isEmpty) return const Text('The server has no packs yet.');
+          if (packs.isEmpty) return Text(c.t('noPacks'));
           return Column(children: [
             for (final pack in packs) _packTile(pack, theme),
           ]);
@@ -171,19 +167,19 @@ class _DataScreenState extends State<DataScreen> {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(pack.name, style: theme.textTheme.titleSmall),
-                  Text('Version ${pack.version} | ${_mb(pack.totalBytes)}', style: theme.textTheme.bodySmall),
+                  Text(c.t('versionSize', {'v': pack.version, 'size': _mb(pack.totalBytes)}), style: theme.textTheme.bodySmall),
                 ]),
               ),
               if (busy)
-                OutlinedButton(onPressed: _cancel?.cancel, child: const Text('Cancel'))
+                OutlinedButton(onPressed: _cancel?.cancel, child: Text(c.t('cancel')))
               else
-                FilledButton(onPressed: _installingId == null ? () => _install(pack) : null, child: const Text('Download')),
+                FilledButton(onPressed: _installingId == null ? () => _install(pack) : null, child: Text(c.t('download'))),
             ]),
             if (busy) ...[
               const SizedBox(height: 10),
               LinearProgressIndicator(value: pr?.fraction),
               const SizedBox(height: 4),
-              Text(pr == null ? 'Starting...' : '${pr.currentFile}  ${_mb(pr.doneBytes)} of ${_mb(pr.totalBytes)}',
+              Text(pr == null ? c.t('startingDownload') : c.t('downloadProgress', {'file': pr.currentFile, 'done': _mb(pr.doneBytes), 'total': _mb(pr.totalBytes)}),
                   style: theme.textTheme.bodySmall),
             ],
           ],

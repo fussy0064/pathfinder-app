@@ -2,22 +2,25 @@ import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'services/location_service.dart';
+import 'settings/app_settings.dart';
 import 'ui/map_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const PathfinderApp());
+  final settings = await AppSettings.load();
+  runApp(PathfinderApp(settings: settings));
 }
 
 class PathfinderApp extends StatefulWidget {
-  const PathfinderApp({super.key});
+  const PathfinderApp({super.key, required this.settings});
+  final AppSettings settings;
 
   @override
   State<PathfinderApp> createState() => _PathfinderAppState();
 }
 
 class _PathfinderAppState extends State<PathfinderApp> {
-  late final AppController _controller = AppController(LocationService());
+  late final AppController _controller = AppController(LocationService(), widget.settings);
 
   @override
   void initState() {

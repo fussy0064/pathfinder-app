@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pathfinder_app/data/places_db.dart';
+import 'package:pathfinder_app/l10n/strings.dart';
 import 'package:pathfinder_app/ui/format.dart';
 
 void main() {
@@ -11,10 +12,15 @@ void main() {
     expect(formatDistance(double.nan), '-');
   });
 
-  test('formatDuration', () {
-    expect(formatDuration(20), '<1 min');
-    expect(formatDuration(25 * 60), '25 min');
-    expect(formatDuration(3900), '1 h 05 min');
+  test('formatDuration in English and Swahili', () {
+    const en = Strings(AppLanguage.en);
+    const sw = Strings(AppLanguage.sw);
+    expect(formatDuration(en, 20), '<1 min');
+    expect(formatDuration(en, 25 * 60), '25 min');
+    expect(formatDuration(en, 3900), '1 h 05 min');
+    expect(formatDuration(sw, 20), 'chini ya dk 1');
+    expect(formatDuration(sw, 25 * 60), 'dk 25');
+    expect(formatDuration(sw, 3900), 'saa 1 dk 05');
   });
 
   test('escapeLike makes wildcards literal', () {

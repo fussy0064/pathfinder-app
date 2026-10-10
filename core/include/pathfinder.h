@@ -79,6 +79,12 @@ PF_API const double* pf_route_handle_step_dists(const pf_route_handle* h);
 PF_API int pf_route_handle_progress(pf_route_handle* h, double lat, double lon,
                                     double* out4, int32_t* next_step);
 
+/* After pf_route_handle_progress: voice cue for the next maneuver, returned ONCE (then reset to 0).
+ * 0 = nothing to say, 1 = about 500 m ahead, 2 = about 200 m, 3 = now (50 m or less). */
+PF_API int pf_route_handle_take_announce(pf_route_handle* h);
+/* Direction of the route segment matched by the last progress call (degrees, 0 = north, 90 = east). */
+PF_API double pf_route_handle_bearing_deg(const pf_route_handle* h);
+
 #ifdef __cplusplus
 }
 #endif

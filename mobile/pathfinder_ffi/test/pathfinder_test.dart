@@ -38,6 +38,8 @@ void main() {
     expect(p.alongM, closeTo(111, 3));
     expect(p.offRouteM, lessThan(1));
     expect(p.nextStep, 1);
+    expect(p.bearingDeg, closeTo(0, 1)); // first leg goes north
+    expect(p.announce, inInclusiveRange(0, 3));
     e.releaseRoute(r.routeId);
     await expectLater(e.progress(r.routeId, GeoPoint(10, 10)), throwsA(isA<PathfinderException>()));
     await expectLater(

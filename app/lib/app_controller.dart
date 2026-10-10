@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,13 +10,22 @@ import 'data/data_store.dart';
 import 'data/mbtiles_provider.dart';
 import 'data/pack_manager.dart';
 import 'data/places_db.dart';
+import 'l10n/strings.dart';
+import 'services/deepseek_client.dart';
+import 'services/guidance_text.dart';
+import 'services/heading.dart';
 import 'services/location_service.dart';
+import 'services/voice_service.dart';
+import 'settings/app_settings.dart';
 
 enum AppPhase { loading, needsData, idle, calculating, routeReady, routeFailed, navigating, arrived, fatal }
 
 /// All app state. The map and screens only read from here and call its methods.
 class AppController extends ChangeNotifier {
-  AppController(this._location);
+  AppController(this._location, this.settings, {VoiceService? voice}) : voice = voice ?? VoiceService() {
+    _voiceLang = settings.language;
+    settings.addListener(_onSettings);
+  }
 
   static const double _offRouteM = 50; // farther than this from the route = off route
   static const int _offRouteUpdates = 3; // ... for this many GPS updates in a row = reroute
@@ -25,38 +35,97 @@ class AppController extends ChangeNotifier {
   static const String _packUrl = String.fromEnvironment('PACK_BASE_URL');
 
   final LocationService _location;
+  final AppSettings settings;
+  final VoiceService voice;
 
   AppPhase phase = AppPhase.loading;
-  String? message;
+  String? messageKey; // localization key of the current message
+  Map<String, String> _messageArgs = const {};
   DataStatus? data;
   PlacesDb? places;
   MbtilesTileProvider? tiles;
-  String? tilesProblem;
+  String? tilesProblemKey;
   LocationState locationState = LocationState.unknown;
   LatLng? user;
   Place? destination;
   RouteResult? route;
   List<LatLng> routePoints = const [];
-  PackManager? packs; // null when no download server is configured
-  String? packsProblem;
-  bool usesCh = false; // true = fast routing index (.ch) is active
   RouteProgress? progress;
   int? calcMillis;
   bool rerouting = false;
+  PackManager? packs; // null when no download server is configured
+  String? packsProblemKey;
+  bool usesCh = false; // true = fast routing index (.ch) is active
+  bool voiceAvailable = false; // a text-to-speech voice for the chosen language exists
+  double? heading; // smoothed travel direction in degrees (0 = north), used while navigating
 
   PathfinderEngine? _engine;
   StreamSubscription<Position>? _sub;
+  AppLanguage _voiceLang = AppLanguage.en;
+  double? _gpsHeading;
   int _offCount = 0;
   bool _progressBusy = false;
   bool _disposed = false;
+
+  Strings get t => Strings(settings.language);
+  String? get message => messageKey == null ? null : t(messageKey!, _messageArgs);
 
   void _notify() {
     if (!_disposed) notifyListeners();
   }
 
+  void _setMessage(String? key, [Map<String, String> args = const {}]) {
+    messageKey = key;
+    _messageArgs = args;
+  }
+
+  void _speak(String text) {
+    if (settings.voiceOn) voice.speak(text);
+  }
+
+  String _keyForStatus(int status) {
+    switch (status) {
+      case kStatusBadArgs:
+        return 'errBadArgs';
+      case kStatusNoStart:
+        return 'errNoStart';
+      case kStatusNoTarget:
+        return 'errNoTarget';
+      case kStatusNoRoute:
+        return 'errNoRoute';
+      case kStatusFile:
+        return 'errFile';
+      case kStatusInvalidGraph:
+        return 'errInvalidGraph';
+      case kStatusInternal:
+        return 'errInternal';
+      case kStatusLibrary:
+        return 'errLibrary';
+      default:
+        return 'errUnknown';
+    }
+  }
+
+  void _onSettings() {
+    if (settings.language != _voiceLang) {
+      _voiceLang = settings.language;
+      _configureVoice();
+    }
+    _notify();
+  }
+
+  Future<void> _configureVoice() async {
+    voiceAvailable = await voice.setLocales(t.voiceLocales);
+    _notify();
+  }
+
+  /// Speaks a short sample (Settings > Test voice).
+  void testVoice() => voice.speak(t('testPhrase'));
+
   Future<void> init() async {
     phase = AppPhase.loading;
     _notify();
+    await _configureVoice();
     await _startLocation();
     await _loadData();
   }
@@ -89,7 +158,7 @@ class AppController extends ChangeNotifier {
     places = null;
     tiles?.dispose();
     tiles = null;
-    tilesProblem = null;
+    tilesProblemKey = null;
     usesCh = false;
     final e = _engine;
     _engine = null;
@@ -106,14 +175,14 @@ class AppController extends ChangeNotifier {
           if (uri == null) throw PackException('bad url');
           packs = PackManager(baseUrl: uri, dataDir: d.dir);
         } on PackException {
-          packsProblem = 'PACK_BASE_URL must be an https address';
+          packsProblemKey = 'errPackUrl';
         }
       }
       if (d.hasTiles) {
         try {
           tiles = MbtilesTileProvider.open(d.tilesPath);
         } catch (e) {
-          tilesProblem = e is FormatException ? e.message : 'Map tiles file could not be opened';
+          tilesProblemKey = e is FormatException ? 'errTilesVector' : 'errTilesOpen';
         }
       }
       if (d.hasPlaces) {
@@ -132,13 +201,13 @@ class AppController extends ChangeNotifier {
       _engine = engine;
       usesCh = engine.usesCh;
       phase = AppPhase.idle;
-      message = null;
+      _setMessage(null);
     } on PathfinderException catch (e) {
       phase = AppPhase.fatal;
-      message = e.message;
+      _setMessage(_keyForStatus(e.status));
     } catch (_) {
       phase = AppPhase.fatal;
-      message = 'Could not start the app';
+      _setMessage('errStart');
     }
     _notify();
   }
@@ -154,10 +223,51 @@ class AppController extends ChangeNotifier {
 
   void _onPosition(Position p) {
     user = LatLng(p.latitude, p.longitude);
-    if (phase == AppPhase.navigating && p.accuracy <= _maxAccuracyM) {
-      _updateProgress(user!); // notifies when done
+    if (p.speed.isFinite && p.speed > 1.0 && p.heading.isFinite && p.heading >= 0) {
+      _gpsHeading = p.heading; // GPS heading is only meaningful while moving
+    }
+    if (phase == AppPhase.navigating) {
+      if (progress == null && _gpsHeading != null) heading = smoothHeading(heading, _gpsHeading!);
+      if (p.accuracy <= _maxAccuracyM) _updateProgress(user!); // notifies when done
     }
     _notify();
+  }
+
+  // ---- search ----
+
+  /// AI search: DeepSeek turns the typed words into place kinds / names; the offline database finds the places.
+  /// Only the typed words leave the phone. Throws AiException (its key is a localization key).
+  Future<List<Place>> aiSearch(String text) async {
+    if (!settings.aiOn || !settings.hasApiKey) throw AiException('aiNeedsSetup');
+    final db = places;
+    if (db == null) throw AiException('searchNoData');
+    final key = await settings.readApiKey();
+    if (key == null || key.isEmpty) throw AiException('aiErrNoKey');
+    final intent = await DeepSeekClient(apiKey: key).interpret(text);
+    final u = user;
+    final out = <Place>[];
+    final seen = <int>{};
+    void add(List<Place> found) {
+      for (final p in found) {
+        if (out.length < 15 && seen.add(p.id)) out.add(p);
+      }
+    }
+
+    if (intent.kinds.isNotEmpty) {
+      add(db.searchByKinds(intent.kinds, nearLat: u?.latitude, nearLon: u?.longitude, limit: 10));
+    }
+    for (final n in intent.names) {
+      add(db.search(n, limit: 8));
+    }
+    if (out.isEmpty) throw AiException('aiNoResults');
+    return out;
+  }
+
+  /// Settings > Test connection. Sends the single word "pharmacy".
+  Future<void> testAiConnection() async {
+    final key = await settings.readApiKey();
+    if (key == null || key.isEmpty) throw AiException('aiErrNoKey');
+    await DeepSeekClient(apiKey: key).interpret('pharmacy');
   }
 
   // ---- route planning ----
@@ -171,11 +281,11 @@ class AppController extends ChangeNotifier {
     final e = _engine, u = user, d = destination;
     if (e == null || d == null) return;
     if (u == null) {
-      _fail('Waiting for your GPS position...');
+      _fail('errWaitingGpsPosition');
       return;
     }
     phase = AppPhase.calculating;
-    message = null;
+    _setMessage(null);
     _notify();
     final watch = Stopwatch()..start();
     try {
@@ -184,10 +294,10 @@ class AppController extends ChangeNotifier {
       calcMillis = watch.elapsedMilliseconds;
       phase = AppPhase.routeReady;
     } on PathfinderException catch (ex) {
-      _fail(ex.message);
+      _fail(_keyForStatus(ex.status));
       return;
     } on ArgumentError {
-      _fail('Invalid location');
+      _fail('errInvalidLocation');
       return;
     }
     _notify();
@@ -201,8 +311,8 @@ class AppController extends ChangeNotifier {
     if (old != null) _engine?.releaseRoute(old.routeId);
   }
 
-  void _fail(String text) {
-    message = text;
+  void _fail(String key) {
+    _setMessage(key);
     phase = AppPhase.routeFailed;
     _notify();
   }
@@ -214,8 +324,10 @@ class AppController extends ChangeNotifier {
     routePoints = const [];
     progress = null;
     destination = null;
-    message = null;
+    heading = null;
+    _setMessage(null);
     phase = AppPhase.idle;
+    voice.stop();
     _notify();
   }
 
@@ -225,7 +337,9 @@ class AppController extends ChangeNotifier {
     if (route == null) return;
     _offCount = 0;
     progress = null;
+    heading = _gpsHeading;
     phase = AppPhase.navigating;
+    _speak(t('vNavStart'));
     _notify();
   }
 
@@ -237,8 +351,17 @@ class AppController extends ChangeNotifier {
       final pr = await e.progress(r.routeId, GeoPoint(pos.latitude, pos.longitude));
       if (phase != AppPhase.navigating || route != r) return;
       progress = pr;
+      // heading: the road direction while on the route, otherwise the GPS direction
+      final target = pr.offRouteM < 30 ? pr.bearingDeg : _gpsHeading;
+      if (target != null) heading = smoothHeading(heading, target);
+      if (pr.announce != 0 && r.steps.isNotEmpty) {
+        final step = r.steps[math.min(math.max(pr.nextStep, 0), r.steps.length - 1)];
+        final phrase = guidancePhrase(t, step.type, pr.announce, pr.toNextM);
+        if (phrase != null) _speak(phrase);
+      }
       if (pr.remainingM <= _arriveM) {
         phase = AppPhase.arrived;
+        _speak(t('vArrived'));
       } else if (pr.offRouteM > _offRouteM) {
         if (++_offCount >= _offRouteUpdates) {
           _progressBusy = false;
@@ -259,12 +382,13 @@ class AppController extends ChangeNotifier {
     final e = _engine, d = destination;
     if (e == null || d == null) return;
     rerouting = true;
+    _speak(t('vRerouting'));
     _notify();
     try {
       final r = await e.route(GeoPoint(from.latitude, from.longitude), GeoPoint(d.lat, d.lon));
       if (phase == AppPhase.navigating) _setRoute(r);
     } on PathfinderException catch (ex) {
-      message = ex.message; // keep the old route and try again later
+      _setMessage(_keyForStatus(ex.status)); // keep the old route and try again later
     } finally {
       _offCount = 0;
       rerouting = false;
@@ -275,7 +399,9 @@ class AppController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    settings.removeListener(_onSettings);
     _sub?.cancel();
+    voice.stop();
     _engine?.close();
     places?.dispose();
     tiles?.dispose();

@@ -134,6 +134,41 @@ static void test_progress() {
   std::printf("[Nav] out-and-back progress is monotonic, ends at %.0f of 600 m\n", prev);
 }
 
+static void test_announce_and_bearing() {
+  // 1000 m east, left turn, 300 m north
+  auto m = line(0, 0, 1000, 0, 25); append(m, line(1000, 0, 1000, 300, 25));
+  Pts p = from_m(m);
+  pf::NavRoute r(p.lat, p.lon);
+  auto at = [&](double x, double y) { return r.update(kLat0 + y / kMy, kLon0 + x / kMx); };
+  CHECK(at(100, 0).announce == 0);     // 900 m to the turn: quiet
+  CHECK(at(480, 0).announce == 0);     // 520 m
+  CHECK(at(520, 0).announce == 1);     // 480 m: "in 500 m"
+  CHECK(at(530, 0).announce == 0);     // no repeat
+  CHECK(at(700, 0).announce == 0);     // 300 m
+  CHECK(at(820, 0).announce == 2);     // 180 m: "in 200 m"
+  CHECK(at(900, 0).announce == 0);     // 100 m: still quiet
+  CHECK(at(960, 0).announce == 3);     // 40 m: "turn now"
+  CHECK(at(980, 0).announce == 0);     // no repeat
+  CHECK(std::fabs(at(500, 0).bearing_deg - 90) < 1.0);   // heading east
+  pf::Progress north = at(1000, 100);
+  CHECK(std::fabs(north.bearing_deg - 0) < 1.0 || std::fabs(north.bearing_deg - 360) < 1.0);
+  CHECK(north.announce == 2);          // exactly 200 m from the end: "you will arrive in 200 m"
+  CHECK(at(1000, 110).announce == 0);  // once only
+  CHECK(at(1000, 250).announce == 0);
+
+  // jumping straight to 30 m before a turn gives ONE "now" cue (no 500 m / 200 m cues first)
+  pf::NavRoute r2(p.lat, p.lon);
+  CHECK(r2.update(kLat0, kLon0 + 970 / kMx).announce == 3);
+  CHECK(r2.update(kLat0, kLon0 + 975 / kMx).announce == 0);
+
+  // a new route object (after a reroute) starts with a clean memory
+  pf::NavRoute r3(p.lat, p.lon);
+  CHECK(r3.update(kLat0, kLon0 + 520 / kMx).announce == 1);
+
+  // going backwards does not repeat the same level
+  CHECK(r3.update(kLat0, kLon0 + 480 / kMx).announce == 0);
+}
+
 static void test_c_api_nav() {
   CHECK(pf_route_handle_step_count(nullptr) == 0 && pf_route_handle_step_types(nullptr) == nullptr);
   double out[4]; int32_t ns;
@@ -144,6 +179,7 @@ int main() {
   test_bearing();
   test_steps();
   test_progress();
+  test_announce_and_bearing();
   test_c_api_nav();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? 1 : 0;
