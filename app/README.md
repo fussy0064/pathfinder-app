@@ -8,6 +8,7 @@ It uses `../mobile/pathfinder_ffi` (C++ engine). The app has no internet code.
 cd app
 flutter create --org com.pathfinder --project-name pathfinder_app .
 git checkout lib test pubspec.yaml analysis_options.yaml   # keep our files if flutter create replaced any
+rm -f test/widget_test.dart                                # flutter create adds a sample test that does not fit this app
 python3 ../tools/setup_android.py .                        # step 2 below, automated
 flutter pub get
 ```

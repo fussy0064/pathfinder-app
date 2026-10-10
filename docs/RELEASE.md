@@ -7,6 +7,7 @@ NOT run by me (no Android SDK here). Follow it on your PC, then send me any erro
 cd app
 flutter create --org com.pathfinder --project-name pathfinder_app .
 git checkout lib test pubspec.yaml analysis_options.yaml
+rm -f test/widget_test.dart
 python3 ../tools/setup_android.py .      # location permissions, backup off, minSdk 24
 flutter pub get
 ```

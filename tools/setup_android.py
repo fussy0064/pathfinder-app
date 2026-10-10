@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """Applies the Android settings from app/README.md after `flutter create`.
-Usage: python3 tools/setup_android.py app
+Usage: python3 tools/setup_android.py app [--internet]
+--internet also adds the INTERNET permission (only needed for DeepSeek AI search and in-app map downloads).
 Adds location permissions, turns off backups and cleartext traffic, sets minSdk 24. Safe to run twice."""
 import pathlib
 import re
 import sys
 
-app = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "app")
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+app = pathlib.Path(args[0] if args else "app")
+want_internet = "--internet" in sys.argv
 manifest = app / "android/app/src/main/AndroidManifest.xml"
 text = manifest.read_text()
 perms = ['<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>',
          '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>']
+if want_internet:
+    perms.append('<uses-permission android:name="android.permission.INTERNET"/>')
 for p in perms:
     if p not in text:
         text = text.replace("<application", p + "\n    <application", 1)
