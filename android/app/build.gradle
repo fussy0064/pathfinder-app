@@ -1,0 +1,67 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.pathfinder.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.pathfinder.app'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+
+        externalNativeBuild {
+            cmake {
+                cppFlags '-std=c++17'
+                arguments '-DANDROID_STL=c++_static'
+            }
+        }
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+    }
+
+    // Two builds of the same app:
+    //   offline = no INTERNET permission at all (routing, search, voice, maps work; no AI search, no downloads)
+    //   online  = adds INTERNET, for DeepSeek AI search and the in-app map downloader
+    // Optional download server:  ./gradlew installOnlineDebug -PpackBaseUrl=https://your-server/packs/
+    flavorDimensions 'network'
+    productFlavors {
+        offline {
+            dimension 'network'
+            manifestPlaceholders = [packBaseUrl: '']
+        }
+        online {
+            dimension 'network'
+            applicationIdSuffix '.online'
+            manifestPlaceholders = [packBaseUrl: (project.findProperty('packBaseUrl') ?: '')]
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // For quick phone tests the release build is signed with the debug key.
+            // Before publishing, create your own key (see docs/RELEASE.md) and replace this line.
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        abortOnError false
+    }
+}

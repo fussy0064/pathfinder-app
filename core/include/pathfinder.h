@@ -1,4 +1,4 @@
-/* Pathfinder C API (stable ABI for Dart FFI / JNI).
+/* Pathfinder C API (stable C ABI; the Android app reaches it through core/jni/pathfinder_jni.cpp).
  * Thread safety: one engine handle may be used from many threads (calls are serialized).
  * Memory: every pf_route filled by pf_route_find must be released with pf_route_free. */
 #ifndef PATHFINDER_H
@@ -48,7 +48,7 @@ PF_API int pf_route_find(pf_engine* engine, double start_lat, double start_lon,
                          double target_lat, double target_lon, pf_route* out);
 PF_API void pf_route_free(pf_route* route);
 
-/* ---- Handle API (used by Dart FFI: no struct layout to match) ----
+/* ---- Handle API (used by the JNI bridge: no struct layout to match) ----
  * pf_route_compute fills *out with a handle on PF_OK (and NULL otherwise).
  * Accessor pointers stay valid until pf_route_handle_free. */
 typedef struct pf_route_handle pf_route_handle;

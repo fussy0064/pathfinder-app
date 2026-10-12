@@ -1,39 +1,16 @@
-# Pathfinder App
+# Pathfinder - Android offline navigation kit
 
-Offline shortest-path navigation app.
-C++ routing engine + Flutter UI, connected with FFI. Data from OpenStreetMap.
+Open the `android` folder in Android Studio and build. Java only, no third-party libraries.
 
-## Structure
-```
-core/include/   graph_format.hpp (binary format + validator), pathfinder.h (C API)
-core/src/       engine.cpp (mmap, spatial index, A*), c_api.cpp
-tools/extractor .osm.pbf -> map_graph.bin
-tools/graph_info validate + print graph stats
-tools/route_cli try a route from the terminal
-tests/          test_engine.cpp
-mobile/         Flutter FFI plugin (see mobile/README.md)
-app/            Flutter app (see app/README.md)
-tools/places/   build places.db (search data)
-tools/ch_builder  map_graph.bin -> map_graph.bin.ch (fast routing index)
-tools/make_pack.py  build a downloadable pack + catalog.json
-tools/bench, tools/bench/bench_map.cpp  speed tests
-docs/           SECURITY.md, PACKS.md, RELEASE.md
-Settings: English/Kiswahili, voice guidance, heading-up map, optional DeepSeek AI search (see app/README.md)
-data/sample/    tiny.osm test map
-PROGRESS.md     where we are + what is next
-```
+- `android/`  the Android Studio project (Java app + build files)
+- `core/`     the C++ routing engine that the app builds with the NDK (`core/jni` is the Java bridge)
 
-## Build (Linux)
-```
-sudo apt install cmake g++ libosmium2-dev libprotozero-dev zlib1g-dev libexpat1-dev libbz2-dev
-mkdir build && cd build && cmake .. && make
-./extractor ../data/sample/tiny.osm map_graph.bin
-./graph_info map_graph.bin
-./route_cli map_graph.bin 10.0 10.0 10.002 10.002
-ctest --output-on-failure   # run tests
-```
+## Build
+1. Android Studio > Open > select the `android` folder. Let Gradle sync.
+2. If asked, install: Android SDK Platform 35, NDK (Side by side), CMake (SDK Manager > SDK Tools).
+3. Build variants: `onlineDebug` (adds INTERNET: AI search + map downloads) or `offlineDebug` (no internet permission).
+4. Run on a phone (USB debugging on). Command line: `cd android && ./gradlew installOnlineDebug`
 
-Sanitizer build (finds memory bugs):
-```
-cmake .. -DPF_SANITIZE=ON -DPF_BUILD_TOOLS=OFF && make test_engine && ./test_engine
-```
+## Map data
+The app needs `map_graph.bin` in `/sdcard/Android/data/<app id>/files/pathfinder/`
+(app id: `com.pathfinder.app.online` or `com.pathfinder.app`). Optional files there: `map_graph.bin.ch`, `places.db`, `tiles.mbtiles`.
