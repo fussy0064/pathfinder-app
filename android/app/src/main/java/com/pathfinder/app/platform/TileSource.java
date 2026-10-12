@@ -9,5 +9,10 @@ public interface TileSource {
     /** PNG/JPG bytes, or null when the tile is not available. */
     byte[] tile(int z, int x, int y);
 
+    /** False when this source never has the tile (outside its area): the map will not ask for it. */
+    default boolean covers(int z, int x, int y) {
+        return true;
+    }
+
     void close();
 }

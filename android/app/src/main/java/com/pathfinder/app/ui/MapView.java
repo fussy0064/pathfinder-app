@@ -14,6 +14,7 @@ import android.view.ScaleGestureDetector;
 import android.view.View;
 
 import com.pathfinder.app.core.Mercator;
+import com.pathfinder.app.core.Tanzania;
 import com.pathfinder.app.platform.TileSource;
 
 import java.util.Set;
@@ -31,6 +32,7 @@ final class MapView extends View {
     }
 
     private static final double MAX_ZOOM = 19;
+    private static final double MIN_ZOOM = 6; // whole Tanzania fits on screen
     private static final int MAX_TILES_PER_DRAW = 400;
 
     private volatile TileSource tiles;
@@ -43,7 +45,7 @@ final class MapView extends View {
         return t;
     });
 
-    private double centerLat = 0, centerLon = 0, zoom = 2;
+    private double centerLat = Tanzania.CENTER_LAT, centerLon = Tanzania.CENTER_LON, zoom = 6;
     private float rotation = 0;
     private double[] routeLats, routeLons;
     private boolean hasDest, hasUser, userArrow;
@@ -156,8 +158,8 @@ final class MapView extends View {
     }
 
     void setCamera(double lat, double lon, double zoomLevel, float rotationDeg) {
-        centerLat = Math.max(-Mercator.MAX_LAT, Math.min(Mercator.MAX_LAT, lat));
-        centerLon = lon;
+        centerLat = Tanzania.clampLat(lat);
+        centerLon = Tanzania.clampLon(lon);
         zoom = clampZoom(zoomLevel);
         rotation = rotationDeg;
         invalidate();
@@ -185,8 +187,8 @@ final class MapView extends View {
         double ox = padL + availW / 2 - w / 2.0, oy = padT + availH / 2 - h / 2.0;
         zoom = z;
         rotation = 0;
-        centerLon = Mercator.lon(cx - ox, z);
-        centerLat = Math.max(-Mercator.MAX_LAT, Math.min(Mercator.MAX_LAT, Mercator.lat(cy - oy, z)));
+        centerLon = Tanzania.clampLon(Mercator.lon(cx - ox, z));
+        centerLat = Tanzania.clampLat(Mercator.lat(cy - oy, z));
         invalidate();
         return true;
     }
@@ -207,7 +209,7 @@ final class MapView extends View {
 
     private double clampZoom(double z) {
         TileSource t = tiles;
-        double min = t != null ? Math.max(1, t.minZoom() - 1) : 1;
+        double min = t != null ? Math.max(MIN_ZOOM, t.minZoom() - 1) : MIN_ZOOM;
         return Math.max(min, Math.min(MAX_ZOOM, z));
     }
 
@@ -222,8 +224,8 @@ final class MapView extends View {
         double rad = Math.toRadians(-rotation);
         double wx = dx * Math.cos(rad) - dy * Math.sin(rad), wy = dx * Math.sin(rad) + dy * Math.cos(rad);
         double cx = Mercator.x(centerLon, zoom) + wx, cy = Mercator.y(centerLat, zoom) + wy;
-        centerLon = Mercator.lon(cx, zoom);
-        centerLat = Math.max(-Mercator.MAX_LAT, Math.min(Mercator.MAX_LAT, Mercator.lat(cy, zoom)));
+        centerLon = Tanzania.clampLon(Mercator.lon(cx, zoom));
+        centerLat = Tanzania.clampLat(Mercator.lat(cy, zoom));
         invalidate();
     }
 
@@ -261,7 +263,9 @@ final class MapView extends View {
     private void drawTiles(Canvas canvas, int w, int h) {
         final TileSource store = tiles;
         if (store == null) return;
-        int z = (int) Math.max(store.minZoom(), Math.min(store.maxZoom(), Math.round(zoom)));
+        // On sharp (high density) screens use tiles one level lower: bigger, easier to read text and 4x fewer tiles to load.
+        int shift = getResources().getDisplayMetrics().density >= 2f ? 1 : 0;
+        int z = (int) Math.max(store.minZoom(), Math.min(store.maxZoom(), Math.round(zoom) - shift));
         double scale = Math.pow(2, zoom - z);
         double cxz = Mercator.x(centerLon, z), cyz = Mercator.y(centerLat, z);
         double radius = Math.hypot(w, h) / 2.0 / scale;
@@ -272,6 +276,7 @@ final class MapView extends View {
         float size = (float) (Mercator.TILE * scale);
         for (int ty = ty0; ty <= ty1; ty++) {
             for (int tx = tx0; tx <= tx1; tx++) {
+                if (!store.covers(z, tx, ty)) continue;
                 long key = ((long) z << 48) | ((long) tx << 24) | ty;
                 Bitmap b = cache.get(key);
                 if (b != null) {

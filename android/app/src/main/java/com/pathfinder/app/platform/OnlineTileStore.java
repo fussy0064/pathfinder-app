@@ -1,5 +1,7 @@
 package com.pathfinder.app.platform;
 
+import com.pathfinder.app.core.Tanzania;
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -9,9 +11,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Downloads raster map tiles from OpenStreetMap and keeps a copy on the phone (fast next time, works offline). */
+/** Downloads raster map tiles (Tanzania only) from OpenStreetMap and keeps a copy on the phone (fast next time, works offline). */
 public final class OnlineTileStore implements TileSource {
-    public final int minZoom = 1;
+    public final int minZoom = 5;
     public final int maxZoom = 19;
 
     private static final int MAX_CACHE = 256;
@@ -35,9 +37,14 @@ public final class OnlineTileStore implements TileSource {
     @Override public void close() { memory.clear(); }
 
     @Override
+    public boolean covers(int z, int x, int y) {
+        return z >= minZoom && z <= maxZoom && x >= 0 && y >= 0 && x < (1 << z) && y < (1 << z) && Tanzania.tileInside(z, x, y);
+    }
+
+    @Override
     public byte[] tile(int z, int x, int y) {
         if (z < minZoom || z > maxZoom) return null;
-        if (x < 0 || y < 0 || x >= (1 << z) || y >= (1 << z)) return null;
+        if (!covers(z, x, y)) return null; // never download outside Tanzania
         long key = ((long) z << 48) | ((long) x << 24) | y;
         byte[] cached = memory.get(key);
         if (cached != null) return cached;
