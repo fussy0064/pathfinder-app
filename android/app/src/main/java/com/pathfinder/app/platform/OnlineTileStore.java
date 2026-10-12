@@ -7,15 +7,23 @@ import java.net.URL;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Downloads raster map tiles from OpenStreetMap. */
-public final class OnlineTileStore {
+public final class OnlineTileStore implements TileSource {
     public final int minZoom = 1;
     public final int maxZoom = 19;
 
     private final ConcurrentHashMap<Long, byte[]> memory = new ConcurrentHashMap<>();
     private static final int MAX_CACHE = 256;
 
+    @Override public int minZoom() { return minZoom; }
+
+    @Override public int maxZoom() { return maxZoom; }
+
+    @Override public void close() { memory.clear(); }
+
+    @Override
     public byte[] tile(int z, int x, int y) {
         if (z < minZoom || z > maxZoom) return null;
+        if (x < 0 || y < 0 || x >= (1 << z) || y >= (1 << z)) return null;
         long key = ((long) z << 48) | ((long) x << 24) | y;
         byte[] cached = memory.get(key);
         if (cached != null) return cached;
@@ -29,7 +37,10 @@ public final class OnlineTileStore {
             c.setRequestProperty("User-Agent", "PathfinderApp/1.0");
             c.setInstanceFollowRedirects(true);
 
-            if (c.getResponseCode() != 200) return null;
+            if (c.getResponseCode() != 200) {
+                c.disconnect();
+                return null;
+            }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             try (InputStream in = c.getInputStream()) {

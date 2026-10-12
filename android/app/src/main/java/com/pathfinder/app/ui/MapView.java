@@ -14,7 +14,7 @@ import android.view.ScaleGestureDetector;
 import android.view.View;
 
 import com.pathfinder.app.core.Mercator;
-import com.pathfinder.app.platform.MbtilesStore;
+import com.pathfinder.app.platform.TileSource;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,7 +33,7 @@ final class MapView extends View {
     private static final double MAX_ZOOM = 19;
     private static final int MAX_TILES_PER_DRAW = 400;
 
-    private volatile MbtilesStore tiles;
+    private volatile TileSource tiles;
     private final LruCache<Long, Bitmap> cache;
     private final Set<Long> pending = ConcurrentHashMap.newKeySet();
     private final Set<Long> missing = ConcurrentHashMap.newKeySet();
@@ -118,7 +118,7 @@ final class MapView extends View {
 
     void setInteractive(boolean on) { interactive = on; }
 
-    void setTiles(MbtilesStore store) {
+    void setTiles(TileSource store) {
         tiles = store;
         cache.evictAll();
         pending.clear();
@@ -199,8 +199,8 @@ final class MapView extends View {
     }
 
     private double clampZoom(double z) {
-        MbtilesStore t = tiles;
-        double min = t != null ? Math.max(1, t.minZoom - 1) : 1;
+        TileSource t = tiles;
+        double min = t != null ? Math.max(1, t.minZoom() - 1) : 1;
         return Math.max(min, Math.min(MAX_ZOOM, z));
     }
 
@@ -252,9 +252,9 @@ final class MapView extends View {
     }
 
     private void drawTiles(Canvas canvas, int w, int h) {
-        final MbtilesStore store = tiles;
+        final TileSource store = tiles;
         if (store == null) return;
-        int z = (int) Math.max(store.minZoom, Math.min(store.maxZoom, Math.round(zoom)));
+        int z = (int) Math.max(store.minZoom(), Math.min(store.maxZoom(), Math.round(zoom)));
         double scale = Math.pow(2, zoom - z);
         double cxz = Mercator.x(centerLon, z), cyz = Mercator.y(centerLat, z);
         double radius = Math.hypot(w, h) / 2.0 / scale;
@@ -278,7 +278,7 @@ final class MapView extends View {
         }
     }
 
-    private void request(final MbtilesStore store, final long key, final int z, final int x, final int y) {
+    private void request(final TileSource store, final long key, final int z, final int x, final int y) {
         if (!pending.add(key)) return;
         try {
             loader.execute(() -> {

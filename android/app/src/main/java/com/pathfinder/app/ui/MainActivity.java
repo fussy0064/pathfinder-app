@@ -27,6 +27,8 @@ import com.pathfinder.app.platform.AndroidVoice;
 import com.pathfinder.app.platform.LocationSource;
 import com.pathfinder.app.platform.MainThreadHandler;
 import com.pathfinder.app.platform.MbtilesStore;
+import com.pathfinder.app.platform.OnlineTileStore;
+import com.pathfinder.app.platform.TileSource;
 import com.pathfinder.app.platform.PlacesDb;
 
 import java.io.File;
@@ -47,7 +49,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
     private FrameLayout bottomHost;
     private LinearLayout fabColumn;
     private LinearLayout topColumn;
-    private MbtilesStore tiles;
+    private TileSource tiles;
     private String tilesProblemKey;
     private int tilesGeneration = -1;
     private int insetTop, insetBottom;
@@ -205,6 +207,8 @@ public final class MainActivity extends Activity implements Controller.Listener 
             } catch (MbtilesStore.TilesException e) {
                 tilesProblemKey = e.vector ? "errTilesVector" : "errTilesOpen";
             }
+        } else if (getPackageName().endsWith(".online")) {
+            tiles = new OnlineTileStore(); // online build only: no local tiles, so use OpenStreetMap
         }
         map.setTiles(tiles);
         centeredOnData = false;
@@ -314,8 +318,9 @@ public final class MainActivity extends Activity implements Controller.Listener 
         if (!centeredOnUser && c.user != null) {
             map.setCamera(c.user.lat, c.user.lon, 15, 0);
             centeredOnUser = true;
-        } else if (!centeredOnUser && !centeredOnData && tiles != null && tiles.center != null) {
-            map.setCamera(tiles.center[0], tiles.center[1], 12, 0);
+        } else if (!centeredOnUser && !centeredOnData && tiles instanceof MbtilesStore && ((MbtilesStore) tiles).center != null) {
+            double[] ctr = ((MbtilesStore) tiles).center;
+            map.setCamera(ctr[0], ctr[1], 12, 0);
             centeredOnData = true;
         }
         if (c.route != null && c.phase == Controller.Phase.ROUTE_READY && fittedRoute != c.route.handle && c.route.lats.length > 1) {

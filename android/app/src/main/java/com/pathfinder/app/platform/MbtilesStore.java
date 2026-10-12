@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** Reads raster (png/jpg) map tiles from an .mbtiles file, opened read-only. */
-public final class MbtilesStore {
+public final class MbtilesStore implements TileSource {
     /** Thrown when the file holds vector tiles (not supported) or cannot be read. */
     public static final class TilesException extends Exception {
         private static final long serialVersionUID = 1L;
@@ -85,7 +85,12 @@ public final class MbtilesStore {
         return Math.min(22, Math.max(0, z));
     }
 
+    @Override public int minZoom() { return minZoom; }
+
+    @Override public int maxZoom() { return maxZoom; }
+
     /** Tile bytes for XYZ coordinates (y from the top), or null when the file has no such tile. */
+    @Override
     public byte[] tile(int z, int x, int y) {
         if (closed || z < 0 || z > 30) return null;
         int row = (1 << z) - 1 - y; // mbtiles rows are TMS (flipped)
@@ -97,6 +102,7 @@ public final class MbtilesStore {
         }
     }
 
+    @Override
     public void close() {
         if (closed) return;
         closed = true;
