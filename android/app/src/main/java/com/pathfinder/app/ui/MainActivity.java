@@ -56,13 +56,17 @@ public final class MainActivity extends Activity implements Controller.Listener 
     private boolean centeredOnUser, centeredOnData, wasNavigating;
     private long fittedRoute = Long.MIN_VALUE;
     private boolean askedBefore;
+    private boolean nightAtCreate, themeChanged;
 
     @Override
     @SuppressWarnings("deprecation") // setSystemUiVisibility / system window insets keep older phones working
     protected void onCreate(Bundle state) {
+        Ui.applyTheme(this);
+        nightAtCreate = Ui.dark;
+        setTheme(Ui.dark ? android.R.style.Theme_Material_NoActionBar : android.R.style.Theme_Material_Light_NoActionBar);
         super.onCreate(state);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(Ui.dark ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
 
         File base = getExternalFilesDir(null);
         if (base == null) base = getFilesDir();
@@ -161,6 +165,18 @@ public final class MainActivity extends Activity implements Controller.Listener 
         if (location.hasPermission()) location.start();
     }
 
+    /** Phone switched between light and dark: rebuild the screen (after navigation ends, so a trip is never reset). */
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration cfg) {
+        super.onConfigurationChanged(cfg);
+        themeChanged = Ui.isNight(this) != nightAtCreate;
+        applyThemeChange();
+    }
+
+    private void applyThemeChange() {
+        if (themeChanged && ctl.phase != Controller.Phase.NAVIGATING) recreate();
+    }
+
     @Override
     protected void onDestroy() {
         location.stop();
@@ -216,6 +232,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
 
     private void render() {
         final Controller c = ctl;
+        if (themeChanged) applyThemeChange();
         final Strings t = c.t();
         final boolean navigating = c.phase == Controller.Phase.NAVIGATING;
         if (tilesGeneration != c.dataGeneration) {

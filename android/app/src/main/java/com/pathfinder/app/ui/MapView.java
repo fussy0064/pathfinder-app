@@ -84,6 +84,13 @@ final class MapView extends View {
         ring.setColor(0xFFFFFFFF);
         ring.setStrokeWidth(Ui.dp(context, 2.5f));
         setBackgroundColor(Ui.BG);
+        if (Ui.dark) { // dim and invert the light map tiles for dark mode
+            tilePaint.setColorFilter(new android.graphics.ColorMatrixColorFilter(new float[] {
+                    -0.8f, 0, 0, 0, 204,
+                    0, -0.8f, 0, 0, 204,
+                    0, 0, -0.8f, 0, 204,
+                    0, 0, 0, 1, 0}));
+        }
 
         gestures = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
             @Override public boolean onDown(MotionEvent e) { return true; }

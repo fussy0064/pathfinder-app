@@ -1,6 +1,7 @@
 package com.pathfinder.app.ui;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -16,14 +17,44 @@ import android.widget.TextView;
 final class Ui {
     private Ui() {}
 
-    static final int PRIMARY = 0xFF14506E;
-    static final int ON_PRIMARY = 0xFFFFFFFF;
-    static final int SURFACE = 0xFFFFFFFF;
-    static final int TEXT = 0xFF1B1F23;
-    static final int MUTED = 0xFF5B6770;
-    static final int ERROR = 0xFFB3261E;
-    static final int OUTLINE = 0xFFC3CCD2;
-    static final int BG = 0xFFE8EEF1;
+    // Light is the default. applyTheme() switches these to the dark set when the phone is in dark mode.
+    static int PRIMARY = 0xFF14506E;
+    static int ON_PRIMARY = 0xFFFFFFFF;
+    static int SURFACE = 0xFFFFFFFF;
+    static int TEXT = 0xFF1B1F23;
+    static int MUTED = 0xFF5B6770;
+    static int ERROR = 0xFFB3261E;
+    static int OUTLINE = 0xFFC3CCD2;
+    static int BG = 0xFFE8EEF1;
+    static boolean dark;
+
+    static boolean isNight(Context c) {
+        return (c.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /** Call before building any view. Follows the phone's dark mode setting. */
+    static void applyTheme(Context c) {
+        dark = isNight(c);
+        if (dark) {
+            PRIMARY = 0xFF6CB4D9;
+            ON_PRIMARY = 0xFF0B2230;
+            SURFACE = 0xFF1E252A;
+            TEXT = 0xFFE6EAED;
+            MUTED = 0xFF9AA7B0;
+            ERROR = 0xFFF2B8B5;
+            OUTLINE = 0xFF3B464D;
+            BG = 0xFF12171A;
+        } else {
+            PRIMARY = 0xFF14506E;
+            ON_PRIMARY = 0xFFFFFFFF;
+            SURFACE = 0xFFFFFFFF;
+            TEXT = 0xFF1B1F23;
+            MUTED = 0xFF5B6770;
+            ERROR = 0xFFB3261E;
+            OUTLINE = 0xFFC3CCD2;
+            BG = 0xFFE8EEF1;
+        }
+    }
 
     static int dp(Context c, float v) {
         return Math.round(v * c.getResources().getDisplayMetrics().density);

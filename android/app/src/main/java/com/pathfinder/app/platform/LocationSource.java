@@ -64,6 +64,26 @@ public final class LocationSource implements LocationListener {
         running = true;
         if (manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) controller.setLocationState(Controller.LocationState.READY);
         pushLastKnown();
+        requestQuickFix();
+    }
+
+    /** Android 11+: ask once for a fix right now instead of waiting for the next update. */
+    @SuppressLint("MissingPermission")
+    private void requestQuickFix() {
+        if (android.os.Build.VERSION.SDK_INT < 30) return;
+        String[] providers = useNetwork
+                ? new String[] {LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER}
+                : new String[] {LocationManager.GPS_PROVIDER};
+        for (String name : providers) {
+            try {
+                if (!manager.isProviderEnabled(name)) continue;
+                manager.getCurrentLocation(name, null, context.getMainExecutor(), l -> {
+                    if (l != null && running) onLocationChanged(l);
+                });
+            } catch (RuntimeException ignored) {
+                // not available: normal updates still work
+            }
+        }
     }
 
     /** Show the newest recent position at once, before the first live fix arrives. */
