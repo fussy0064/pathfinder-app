@@ -68,6 +68,7 @@ final class MapView extends View {
     private Listener listener;
 
     private final Paint tilePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Paint attrPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint routeCasing = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint routeLine = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -283,6 +284,22 @@ final class MapView extends View {
         drawRoute(canvas, cxw, cyw);
         canvas.restore();
         drawMarkers(canvas, cxw, cyw, w, h);
+        drawAttribution(canvas, h);
+    }
+
+    /** Small credit line for the map data owner (required by the map data licenses). */
+    private void drawAttribution(Canvas canvas, int h) {
+        TileSource store = tiles;
+        String text = store == null ? null : store.attribution();
+        if (text == null) return;
+        float d = getResources().getDisplayMetrics().density;
+        attrPaint.setTextSize(10 * d);
+        attrPaint.setColor(0xFF222222);
+        float w = attrPaint.measureText(text) + 8 * d;
+        float x = 4 * d, y = h - 4 * d;
+        fill.setColor(0xB3FFFFFF);
+        canvas.drawRect(x, y - 14 * d, x + w, y, fill);
+        canvas.drawText(text, x + 4 * d, y - 3.5f * d, attrPaint);
     }
 
     private void drawTiles(Canvas canvas, int w, int h) {

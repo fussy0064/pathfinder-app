@@ -208,6 +208,17 @@ public final class MainActivity extends Activity implements Controller.Listener 
         render();
     }
 
+    /** Optional MapTiler key, set at build time with -PmapTilerKey=... */
+    private String tileKey() {
+        try {
+            ApplicationInfo info = getPackageManager().getApplicationInfo(getPackageName(), PackageManager.GET_META_DATA);
+            String key = info.metaData == null ? null : info.metaData.getString("map_tile_key");
+            return key == null ? "" : key;
+        } catch (PackageManager.NameNotFoundException e) {
+            return "";
+        }
+    }
+
     /** Optional download server, set at build time with -PpackBaseUrl=https://... (see docs/PHONE_TEST.md). */
     private String packBaseUrl() {
         try {
@@ -306,7 +317,9 @@ public final class MainActivity extends Activity implements Controller.Listener 
                 tilesProblemKey = e.vector ? "errTilesVector" : "errTilesOpen";
             }
         } else if (getPackageName().endsWith(".online")) {
-            tiles = new OnlineTileStore(new java.io.File(getCacheDir(), "tiles")); // online build only: no local tiles, so use OpenStreetMap
+            String tileKey = tileKey();
+            // online build only: no local tiles, so download them (MapTiler if a key was set at build time, else OpenStreetMap)
+            tiles = new OnlineTileStore(new java.io.File(getCacheDir(), tileKey.isEmpty() ? "tiles" : "tiles_mt"), tileKey);
         }
         map.setTiles(tiles);
         centeredOnData = false;

@@ -12,7 +12,7 @@ import java.net.URL;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 
-/** Downloads raster map tiles (Tanzania only) from OpenStreetMap and keeps a copy on the phone (fast next time, works offline). */
+/** Downloads raster map tiles (Tanzania only) from MapTiler (when a key is set) or OpenStreetMap, and keeps a copy on the phone (fast next time, works offline). */
 public final class OnlineTileStore implements TileSource {
     public final int minZoom = 5;
     public final int maxZoom = 19;
@@ -22,13 +22,16 @@ public final class OnlineTileStore implements TileSource {
     private static final long MAX_DISK_BYTES = 60L * 1024 * 1024;
 
     /** OpenStreetMap asks for at most 2 downloads at once. Reading from the phone cache is not limited. */
-    private static final Semaphore NET = new Semaphore(2);
+    private final Semaphore net;
+    private final String key; // MapTiler key (letters and digits only), or "" to use OpenStreetMap
 
     private final ConcurrentHashMap<Long, byte[]> memory = new ConcurrentHashMap<>();
     private final File dir; // may be null: no disk cache
     private int writes;
 
-    public OnlineTileStore(File cacheDir) {
+    public OnlineTileStore(File cacheDir, String mapTilerKey) {
+        this.key = mapTilerKey != null && mapTilerKey.matches("[A-Za-z0-9]{8,64}") ? mapTilerKey : "";
+        this.net = new Semaphore(key.isEmpty() ? 2 : 6);
         this.dir = cacheDir;
         if (dir != null) //noinspection ResultOfMethodCallIgnored
             dir.mkdirs();
@@ -49,31 +52,37 @@ public final class OnlineTileStore implements TileSource {
     public byte[] tile(int z, int x, int y) {
         if (z < minZoom || z > maxZoom) return null;
         if (!covers(z, x, y)) return null; // never download outside Tanzania
-        long key = ((long) z << 48) | ((long) x << 24) | y;
-        byte[] cached = memory.get(key);
+        long id = ((long) z << 48) | ((long) x << 24) | y;
+        byte[] cached = memory.get(id);
         if (cached != null) return cached;
 
         File f = dir == null ? null : new File(dir, z + "_" + x + "_" + y + ".png");
         boolean onDisk = f != null && f.isFile() && f.length() > 0;
         if (onDisk && System.currentTimeMillis() - f.lastModified() < FRESH_MS) {
             byte[] d = read(f);
-            if (d != null) return remember(key, d);
+            if (d != null) return remember(id, d);
         }
 
         byte[] data = download(z, x, y);
         if (data == null) return onDisk ? read(f) : null; // offline: an old copy is better than a blank tile
         if (f != null) write(f, data);
-        return remember(key, data);
+        return remember(id, data);
     }
 
-    private byte[] remember(long key, byte[] data) {
-        if (memory.size() < MAX_CACHE) memory.put(key, data);
+    /** The text the map must show. */
+    @Override
+    public String attribution() {
+        return key.isEmpty() ? "\u00a9 OpenStreetMap contributors" : "\u00a9 MapTiler \u00a9 OpenStreetMap contributors";
+    }
+
+    private byte[] remember(long id, byte[] data) {
+        if (memory.size() < MAX_CACHE) memory.put(id, data);
         return data;
     }
 
-    private static byte[] download(int z, int x, int y) {
+    private byte[] download(int z, int x, int y) {
         try {
-            NET.acquire();
+            net.acquire();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return null;
@@ -81,7 +90,9 @@ public final class OnlineTileStore implements TileSource {
         HttpURLConnection c = null;
         boolean reusable = false;
         try {
-            c = (HttpURLConnection) new URL("https://tile.openstreetmap.org/" + z + "/" + x + "/" + y + ".png").openConnection();
+            String url = key.isEmpty() ? "https://tile.openstreetmap.org/" + z + "/" + x + "/" + y + ".png"
+                    : "https://api.maptiler.com/maps/streets-v2/256/" + z + "/" + x + "/" + y + ".png?key=" + key;
+            c = (HttpURLConnection) new URL(url).openConnection();
             c.setConnectTimeout(5000);
             c.setReadTimeout(6000);
             c.setRequestProperty("User-Agent", "PathfinderApp/1.0");
@@ -99,7 +110,7 @@ public final class OnlineTileStore implements TileSource {
             return null;
         } finally {
             if (c != null && !reusable) c.disconnect();
-            NET.release();
+            net.release();
         }
     }
 

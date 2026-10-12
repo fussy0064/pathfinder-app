@@ -14,5 +14,10 @@ public interface TileSource {
         return true;
     }
 
+    /** Text the map must show (data owner), or null. */
+    default String attribution() {
+        return null;
+    }
+
     void close();
 }

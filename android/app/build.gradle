@@ -32,12 +32,13 @@ android {
     productFlavors {
         offline {
             dimension 'network'
-            manifestPlaceholders = [packBaseUrl: '']
+            manifestPlaceholders = [packBaseUrl: '', tileKey: '']
         }
         online {
             dimension 'network'
             applicationIdSuffix '.online'
-            manifestPlaceholders = [packBaseUrl: (project.findProperty('packBaseUrl') ?: '')]
+            // Optional faster map tiles:  ./gradlew installOnlineDebug -PmapTilerKey=YOUR_KEY  (put the key in ~/.gradle/gradle.properties, not in git)
+            manifestPlaceholders = [packBaseUrl: (project.findProperty('packBaseUrl') ?: ''), tileKey: (project.findProperty('mapTilerKey') ?: '')]
         }
     }
 
