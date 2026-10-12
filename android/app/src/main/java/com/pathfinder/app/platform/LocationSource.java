@@ -8,6 +8,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import com.pathfinder.app.core.Controller;
 import com.pathfinder.app.core.Fix;
@@ -18,11 +19,16 @@ public final class LocationSource implements LocationListener {
     private final LocationManager manager;
     private final Controller controller;
     private boolean running;
+    private long lastGpsMs = -100000;
+    /** Online build only: Wi-Fi/cell location gives a fast first position while GPS warms up. */
+    private final boolean useNetwork;
+    private static final long STALE_MS = 30 * 60 * 1000L;
 
     public LocationSource(Context context, Controller controller) {
         this.context = context;
         this.controller = controller;
         this.manager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        this.useNetwork = context.getPackageName().endsWith(".online");
     }
 
     public boolean hasPermission() {
@@ -46,10 +52,42 @@ public final class LocationSource implements LocationListener {
             controller.setLocationState(Controller.LocationState.SERVICE_OFF);
             return;
         }
+        if (useNetwork) {
+            try {
+                if (manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 10f, this, Looper.getMainLooper());
+                }
+            } catch (RuntimeException ignored) {
+                // no network provider: GPS only
+            }
+        }
         running = true;
         if (manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) controller.setLocationState(Controller.LocationState.READY);
-        Location last = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-        if (last != null) onLocationChanged(last);
+        pushLastKnown();
+    }
+
+    /** Show the newest recent position at once, before the first live fix arrives. */
+    @SuppressLint("MissingPermission")
+    private void pushLastKnown() {
+        Location best = null;
+        String[] providers = {LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER};
+        for (String name : providers) {
+            try {
+                Location l = manager.getLastKnownLocation(name);
+                if (l == null) continue;
+                long ageMs = (SystemClock.elapsedRealtimeNanos() - l.getElapsedRealtimeNanos()) / 1000000L;
+                if (ageMs > STALE_MS) continue;
+                if (best == null || l.getElapsedRealtimeNanos() > best.getElapsedRealtimeNanos()) best = l;
+            } catch (RuntimeException ignored) {
+                // provider missing: skip
+            }
+        }
+        if (best != null) push(best);
+    }
+
+    private void push(Location l) {
+        controller.onFix(new Fix(l.getLatitude(), l.getLongitude(), l.hasAccuracy() ? l.getAccuracy() : 999f,
+                l.hasSpeed() ? l.getSpeed() : 0f, l.getBearing(), l.hasBearing()));
     }
 
     public void stop() {
@@ -60,8 +98,10 @@ public final class LocationSource implements LocationListener {
 
     @Override
     public void onLocationChanged(Location l) {
-        controller.onFix(new Fix(l.getLatitude(), l.getLongitude(), l.hasAccuracy() ? l.getAccuracy() : 999f,
-                l.hasSpeed() ? l.getSpeed() : 0f, l.getBearing(), l.hasBearing()));
+        long now = SystemClock.elapsedRealtime();
+        if (LocationManager.GPS_PROVIDER.equals(l.getProvider())) lastGpsMs = now;
+        else if (now - lastGpsMs < 10000L) return; // a fresh GPS fix is better than Wi-Fi/cell
+        push(l);
     }
 
     @Override

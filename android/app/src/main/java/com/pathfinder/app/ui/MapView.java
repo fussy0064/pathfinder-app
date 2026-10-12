@@ -286,7 +286,13 @@ final class MapView extends View {
                     byte[] data = store.tile(z, x, y);
                     Bitmap bmp = data == null ? null : BitmapFactory.decodeByteArray(data, 0, data.length);
                     if (bmp != null) cache.put(key, bmp);
-                    else missing.add(key);
+                    else {
+                        missing.add(key);
+                        postDelayed(() -> { // try again later (network may come back)
+                            missing.remove(key);
+                            invalidate();
+                        }, 15000);
+                    }
                 } finally {
                     pending.remove(key);
                 }

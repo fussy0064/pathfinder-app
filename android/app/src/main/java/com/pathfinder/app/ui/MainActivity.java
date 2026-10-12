@@ -208,7 +208,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
                 tilesProblemKey = e.vector ? "errTilesVector" : "errTilesOpen";
             }
         } else if (getPackageName().endsWith(".online")) {
-            tiles = new OnlineTileStore(); // online build only: no local tiles, so use OpenStreetMap
+            tiles = new OnlineTileStore(new java.io.File(getCacheDir(), "tiles")); // online build only: no local tiles, so use OpenStreetMap
         }
         map.setTiles(tiles);
         centeredOnData = false;
