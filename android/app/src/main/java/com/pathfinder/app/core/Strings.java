@@ -86,6 +86,13 @@ public final class Strings {
         EN.put("downloadProgress", "{file}  {done} of {total}");
         EN.put("settings", "Settings");
         EN.put("language", "Language");
+        EN.put("editPin", "Edit pin");
+        EN.put("pickup", "Pickup");
+        EN.put("dropPinTitle", "Destination pin");
+        EN.put("pickupTitle", "Pickup point");
+        EN.put("confirm", "Confirm");
+        EN.put("searchingStreet", "Finding street...");
+        EN.put("streetUnknown", "Street name not available");
         EN.put("theme", "Appearance");
         EN.put("themeSystem", "System");
         EN.put("themeLight", "Light");
@@ -208,6 +215,13 @@ public final class Strings {
         SW.put("downloadProgress", "{file}  {done} kati ya {total}");
         SW.put("settings", "Mipangilio");
         SW.put("language", "Lugha");
+        SW.put("editPin", "Hariri alama");
+        SW.put("pickup", "Kuchukua");
+        SW.put("dropPinTitle", "Alama ya mwisho");
+        SW.put("pickupTitle", "Mahali pa kuchukua");
+        SW.put("confirm", "Thibitisha");
+        SW.put("searchingStreet", "Inatafuta barabara...");
+        SW.put("streetUnknown", "Jina la barabara halipatikani");
         SW.put("theme", "Mwonekano");
         SW.put("themeSystem", "Mfumo");
         SW.put("themeLight", "Mwanga");

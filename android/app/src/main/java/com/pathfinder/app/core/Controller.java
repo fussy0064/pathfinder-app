@@ -58,6 +58,8 @@ public final class Controller {
     public Ports.PlacesIndex places;
     public LocationState locationState = LocationState.UNKNOWN;
     public GeoPoint user;
+    /** Start of the route when the user picked another pickup point; null = my location. */
+    public GeoPoint pickup;
     public Place destination;
     public RouteResult route;
     public RouteProgress progress;
@@ -395,7 +397,7 @@ public final class Controller {
 
     private void calculate() {
         final EngineClient e = engine;
-        final GeoPoint u = user;
+        final GeoPoint u = pickup != null ? pickup : user;
         final Place d = destination;
         if (e == null || d == null) return;
         if (u == null) {
@@ -421,6 +423,13 @@ public final class Controller {
         });
     }
 
+    /** Change where the route starts (null = my location). Recalculates when a destination is set. */
+    public void setPickup(GeoPoint p) {
+        pickup = p;
+        if (destination != null && phase != Phase.NAVIGATING) calculate();
+        else changed();
+    }
+
     private void setRoute(RouteResult r) {
         RouteResult old = route;
         route = r;
@@ -443,6 +452,7 @@ public final class Controller {
     public void clearRoute() {
         releaseRoute();
         destination = null;
+        pickup = null;
         heading = null;
         setMessage(null);
         phase = Phase.IDLE;

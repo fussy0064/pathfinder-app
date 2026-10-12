@@ -8,18 +8,23 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.pathfinder.app.core.Controller;
 import com.pathfinder.app.core.DeepSeekClient;
+import com.pathfinder.app.core.GeoPoint;
 import com.pathfinder.app.core.Place;
 import com.pathfinder.app.core.Strings;
 import com.pathfinder.app.platform.AndroidPrefs;
@@ -31,7 +36,12 @@ import com.pathfinder.app.platform.OnlineTileStore;
 import com.pathfinder.app.platform.TileSource;
 import com.pathfinder.app.platform.PlacesDb;
 
+import com.pathfinder.app.platform.StreetLookup;
+
 import java.io.File;
+import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** The only screen: map + panels. All logic lives in Controller. */
 public final class MainActivity extends Activity implements Controller.Listener {
@@ -43,6 +53,38 @@ public final class MainActivity extends Activity implements Controller.Listener 
     private MapView map;
     private SearchPanel search;
     private SettingsPanel settings;
+
+    // ---- pin editing (destination pin / pickup point) ----
+    private static final int PICK_NONE = 0, PICK_DEST = 1, PICK_PICKUP = 2;
+    private int pickMode = PICK_NONE;
+    private PinView pin;
+    private FrameLayout pickHost;
+    private TextView pickTitle, pickStreet, pickCoords;
+    private Button pickMyLocation;
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private final ExecutorService streetIo = Executors.newSingleThreadExecutor();
+    private double lastLat, lastLon, lookedLat = Double.NaN, lookedLon = Double.NaN;
+    private long movedAt;
+    private String street, pickupName;
+    private int streetReq;
+    private final Runnable pickTick = new Runnable() {
+        @Override public void run() {
+            if (pickMode == PICK_NONE) return;
+            double[] c = map.center();
+            long now = SystemClock.uptimeMillis();
+            if (Math.abs(c[0] - lastLat) > 1e-6 || Math.abs(c[1] - lastLon) > 1e-6) {
+                lastLat = c[0];
+                lastLon = c[1];
+                movedAt = now;
+                street = null;
+                streetReq++;
+                updatePickText(true);
+            } else if (now - movedAt >= 700 && !(c[0] == lookedLat && c[1] == lookedLon)) {
+                lookupStreet(c[0], c[1]);
+            }
+            ui.postDelayed(this, 300);
+        }
+    };
     private DataPanel dataPanel;
     private FrameLayout topBar;
     private FrameLayout chipHost;
@@ -82,8 +124,9 @@ public final class MainActivity extends Activity implements Controller.Listener 
         map = new MapView(this);
         root.addView(map, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         map.setListener((lat, lon) -> {
+            if (pickMode != PICK_NONE) return;
             if (ctl.phase == Controller.Phase.IDLE || ctl.phase == Controller.Phase.ROUTE_FAILED || ctl.phase == Controller.Phase.ROUTE_READY) {
-                ctl.chooseDestination(Place.dropped(lat, lon, ctl.t().get("droppedPin")));
+                startPick(PICK_DEST, lat, lon); // long press: move the map to fine-tune the pin, then Confirm
             }
         });
 
@@ -115,6 +158,37 @@ public final class MainActivity extends Activity implements Controller.Listener 
         for (View panel : new View[] {search, settings, dataPanel}) {
             root.addView(panel, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
+
+        pin = new PinView(this);
+        pin.setVisibility(View.GONE);
+        pin.setTranslationY(-Ui.dp(this, 26));
+        root.addView(pin, new FrameLayout.LayoutParams(Ui.dp(this, 40), Ui.dp(this, 52), Gravity.CENTER));
+        pickHost = new FrameLayout(this);
+        pickHost.setVisibility(View.GONE);
+        LinearLayout pickCard = Ui.card(this);
+        pickTitle = Ui.text(this, "", 14, Ui.MUTED, false);
+        pickStreet = Ui.text(this, "", 18, Ui.TEXT, true);
+        pickCoords = Ui.text(this, "", 13, Ui.MUTED, false);
+        pickCard.addView(pickTitle);
+        pickCard.addView(pickStreet);
+        pickCard.addView(pickCoords);
+        LinearLayout pickButtons = Ui.row(this);
+        pickButtons.setPadding(0, Ui.dp(this, 12), 0, 0);
+        Button pickCancel = Ui.button(this, ctl.t().get("cancel"), false, v -> endPick());
+        pickMyLocation = Ui.button(this, ctl.t().get("myLocation"), false, v -> {
+            ctl.setPickup(null);
+            pickupName = null;
+            endPick();
+        });
+        Button pickConfirm = Ui.button(this, ctl.t().get("confirm"), true, v -> confirmPick());
+        pickButtons.addView(pickCancel, Ui.weight(1));
+        pickButtons.addView(Ui.spacer(this, 8));
+        pickButtons.addView(pickMyLocation, Ui.weight(1));
+        pickButtons.addView(Ui.spacer(this, 8));
+        pickButtons.addView(pickConfirm, Ui.weight(1));
+        pickCard.addView(pickButtons);
+        pickHost.addView(pickCard, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(pickHost, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             insetTop = insets.getSystemWindowInsetTop();
@@ -149,6 +223,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
         int m = Ui.dp(this, 12);
         topColumn.setPadding(m, insetTop + m, m, 0);
         bottomHost.setPadding(m, 0, m, insetBottom + m);
+        pickHost.setPadding(m, 0, m, insetBottom + m);
         fabColumn.setPadding(0, 0, m, insetBottom + m);
         search.setInsets(insetTop, insetBottom);
         settings.setInsets(insetTop, insetBottom);
@@ -183,6 +258,8 @@ public final class MainActivity extends Activity implements Controller.Listener 
 
     @Override
     protected void onDestroy() {
+        ui.removeCallbacks(pickTick);
+        streetIo.shutdownNow();
         location.stop();
         ctl.removeListener(this);
         ctl.dispose();
@@ -195,7 +272,8 @@ public final class MainActivity extends Activity implements Controller.Listener 
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        if (search.getVisibility() == View.VISIBLE) search.close();
+        if (pickMode != PICK_NONE) endPick();
+        else if (search.getVisibility() == View.VISIBLE) search.close();
         else if (settings.getVisibility() == View.VISIBLE) settings.setVisibility(View.GONE);
         else if (dataPanel.getVisibility() == View.VISIBLE) dataPanel.setVisibility(View.GONE);
         else super.onBackPressed();
@@ -245,12 +323,13 @@ public final class MainActivity extends Activity implements Controller.Listener 
         }
 
         map.setRoute(c.route == null ? null : c.route.lats, c.route == null ? null : c.route.lons);
-        map.setDestination(c.destination != null, c.destination == null ? 0 : c.destination.lat, c.destination == null ? 0 : c.destination.lon);
+        map.setDestination(c.destination != null && pickMode != PICK_DEST, c.destination == null ? 0 : c.destination.lat, c.destination == null ? 0 : c.destination.lon);
+        map.setPickup(c.pickup != null && pickMode != PICK_PICKUP && !navigating, c.pickup == null ? 0 : c.pickup.lat, c.pickup == null ? 0 : c.pickup.lon);
         boolean up = c.prefs().headingUp() && c.heading != null;
         map.setUser(c.user != null, c.user == null ? 0 : c.user.lat, c.user == null ? 0 : c.user.lon,
                 c.heading == null ? 0f : c.heading.floatValue(), navigating);
         map.setInteractive(!navigating);
-        updateCamera(up);
+        if (pickMode == PICK_NONE) updateCamera(up);
         if (navigating) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -299,13 +378,102 @@ public final class MainActivity extends Activity implements Controller.Listener 
                     c.prefs().headingUp() ? t.get("headingUpTip") : t.get("northUpTip"), v -> c.setHeadingUp(!c.prefs().headingUp())));
         } else if (c.user != null) {
             fabColumn.addView(Icons.roundButton(this, Icons.Kind.LOCATE, Ui.TEXT, Ui.SURFACE, t.get("myLocation"),
-                    v -> map.setCamera(c.user.lat, c.user.lon, 16, 0)));
+                    v -> map.setCamera(c.user.lat, c.user.lon, 17, 0)));
         }
+        if (!navigating && c.destination != null) {
+            fabColumn.addView(Ui.spacer(this, 8));
+            fabColumn.addView(Ui.button(this, t.get("editPin"), false, v -> startPick(PICK_DEST, c.destination.lat, c.destination.lon)));
+            fabColumn.addView(Ui.spacer(this, 8));
+            String label = t.get("pickup") + (c.pickup == null ? "" : ": " + (pickupName == null ? "*" : shorten(pickupName)));
+            fabColumn.addView(Ui.button(this, label, false, v -> {
+                double[] mc = map.center();
+                GeoPoint from = c.pickup != null ? c.pickup : c.user;
+                startPick(PICK_PICKUP, from == null ? mc[0] : from.lat, from == null ? mc[1] : from.lon);
+            }));
+        }
+
+        // while editing a pin, only the pin and its card are shown
+        boolean picking = pickMode != PICK_NONE;
+        topColumn.setVisibility(picking ? View.GONE : View.VISIBLE);
+        bottomHost.setVisibility(picking ? View.GONE : View.VISIBLE);
+        fabColumn.setVisibility(picking ? View.GONE : View.VISIBLE);
+        pin.setVisibility(picking ? View.VISIBLE : View.GONE);
+        pickHost.setVisibility(picking ? View.VISIBLE : View.GONE);
 
         // panels that are open follow the language / state
         search.refresh();
         settings.refresh();
         dataPanel.refresh();
+    }
+
+    // ---- pin editing ----
+
+    private static String shorten(String s) {
+        return s.length() <= 18 ? s : s.substring(0, 17) + "...";
+    }
+
+    private void startPick(int mode, double lat, double lon) {
+        pickMode = mode;
+        street = null;
+        streetReq++;
+        lookedLat = Double.NaN;
+        lookedLon = Double.NaN;
+        map.setCamera(lat, lon, 17, 0);
+        double[] c = map.center();
+        lastLat = c[0];
+        lastLon = c[1];
+        movedAt = SystemClock.uptimeMillis();
+        Strings t = ctl.t();
+        pin.setColor(mode == PICK_DEST ? 0xFFC62828 : 0xFF2E7D32);
+        pickTitle.setText(t.get(mode == PICK_DEST ? "dropPinTitle" : "pickupTitle"));
+        pickMyLocation.setVisibility(mode == PICK_PICKUP && ctl.user != null ? View.VISIBLE : View.GONE);
+        updatePickText(true);
+        ui.removeCallbacks(pickTick);
+        ui.postDelayed(pickTick, 300);
+        render();
+    }
+
+    private void updatePickText(boolean searching) {
+        Strings t = ctl.t();
+        pickStreet.setText(street != null ? street : t.get(searching ? "searchingStreet" : "streetUnknown"));
+        pickCoords.setText(String.format(Locale.US, "%.5f, %.5f", lastLat, lastLon));
+    }
+
+    private void lookupStreet(final double lat, final double lon) {
+        lookedLat = lat;
+        lookedLon = lon;
+        final int req = ++streetReq;
+        final String lang = ctl.prefs().lang().tag;
+        try {
+            streetIo.execute(() -> {
+                final String found = StreetLookup.lookup(lat, lon, lang);
+                runOnUiThread(() -> {
+                    if (req != streetReq || pickMode == PICK_NONE) return;
+                    street = found;
+                    updatePickText(false);
+                });
+            });
+        } catch (RuntimeException rejected) {
+            // activity is closing
+        }
+    }
+
+    private void confirmPick() {
+        double[] c = map.center();
+        if (pickMode == PICK_DEST) {
+            ctl.chooseDestination(Place.dropped(c[0], c[1], street != null ? street : ctl.t().get("droppedPin")));
+        } else if (pickMode == PICK_PICKUP) {
+            pickupName = street;
+            ctl.setPickup(new GeoPoint(c[0], c[1]));
+        }
+        endPick();
+    }
+
+    private void endPick() {
+        pickMode = PICK_NONE;
+        streetReq++;
+        ui.removeCallbacks(pickTick);
+        render();
     }
 
     /** Tapping the "location permission needed" chip: ask again, or open the app settings if Android will not ask. */
@@ -337,7 +505,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
             wasNavigating = false;
         }
         if (!centeredOnUser && c.user != null) {
-            map.setCamera(c.user.lat, c.user.lon, 15, 0);
+            map.setCamera(c.user.lat, c.user.lon, 16, 0);
             centeredOnUser = true;
         } else if (!centeredOnUser && !centeredOnData && tiles instanceof MbtilesStore && ((MbtilesStore) tiles).center != null) {
             double[] ctr = ((MbtilesStore) tiles).center;

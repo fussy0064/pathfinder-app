@@ -60,7 +60,8 @@ final class MapView extends View {
     private double centerLat = Tanzania.CENTER_LAT, centerLon = Tanzania.CENTER_LON, zoom = 6;
     private float rotation = 0;
     private double[] routeLats, routeLons;
-    private boolean hasDest, hasUser, userArrow;
+    private boolean hasDest, hasUser, userArrow, hasPickup;
+    private double pickupLat, pickupLon;
     private double destLat, destLon, userLat, userLon;
     private float userHeading;
     private boolean interactive = true;
@@ -151,6 +152,18 @@ final class MapView extends View {
         routeLats = lats;
         routeLons = lons;
         invalidate();
+    }
+
+    void setPickup(boolean has, double lat, double lon) {
+        hasPickup = has;
+        pickupLat = lat;
+        pickupLon = lon;
+        invalidate();
+    }
+
+    /** Map centre {lat, lon}. */
+    double[] center() {
+        return new double[] {centerLat, centerLon};
     }
 
     void setDestination(boolean has, double lat, double lon) {
@@ -370,6 +383,13 @@ final class MapView extends View {
 
     private void drawMarkers(Canvas canvas, double cxw, double cyw, int w, int h) {
         float d = getResources().getDisplayMetrics().density;
+        if (hasPickup) {
+            float[] q = toScreen(pickupLat, pickupLon, cxw, cyw, w, h);
+            fill.setColor(0xFF2E7D32);
+            canvas.drawCircle(q[0], q[1], 9 * d, fill);
+            fill.setColor(0xFFFFFFFF);
+            canvas.drawCircle(q[0], q[1], 3.6f * d, fill);
+        }
         if (hasDest) {
             float[] p = toScreen(destLat, destLon, cxw, cyw, w, h);
             float r = 9 * d, headY = p[1] - 2.2f * r;
