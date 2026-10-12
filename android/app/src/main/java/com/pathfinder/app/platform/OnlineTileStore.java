@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 
 /** Downloads raster map tiles (Tanzania only) from OpenStreetMap and keeps a copy on the phone (fast next time, works offline). */
 public final class OnlineTileStore implements TileSource {
@@ -19,6 +20,9 @@ public final class OnlineTileStore implements TileSource {
     private static final int MAX_CACHE = 256;
     private static final long FRESH_MS = 7L * 24 * 3600 * 1000;
     private static final long MAX_DISK_BYTES = 60L * 1024 * 1024;
+
+    /** OpenStreetMap asks for at most 2 downloads at once. Reading from the phone cache is not limited. */
+    private static final Semaphore NET = new Semaphore(2);
 
     private final ConcurrentHashMap<Long, byte[]> memory = new ConcurrentHashMap<>();
     private final File dir; // may be null: no disk cache
@@ -68,7 +72,14 @@ public final class OnlineTileStore implements TileSource {
     }
 
     private static byte[] download(int z, int x, int y) {
+        try {
+            NET.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
         HttpURLConnection c = null;
+        boolean reusable = false;
         try {
             c = (HttpURLConnection) new URL("https://tile.openstreetmap.org/" + z + "/" + x + "/" + y + ".png").openConnection();
             c.setConnectTimeout(5000);
@@ -82,11 +93,13 @@ public final class OnlineTileStore implements TileSource {
                 int n;
                 while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
             }
+            reusable = true; // fully read: Android keeps the connection open for the next tile (no new TLS handshake)
             return out.toByteArray();
         } catch (Exception e) {
             return null;
         } finally {
-            if (c != null) c.disconnect();
+            if (c != null && !reusable) c.disconnect();
+            NET.release();
         }
     }
 

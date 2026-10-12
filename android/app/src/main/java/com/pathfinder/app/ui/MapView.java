@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.util.LruCache;
 import android.view.GestureDetector;
@@ -20,7 +21,9 @@ import com.pathfinder.app.platform.TileSource;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Offline map: draws raster tiles from an .mbtiles file, the route line, the destination pin and the user.
@@ -39,11 +42,20 @@ final class MapView extends View {
     private final LruCache<Long, Bitmap> cache;
     private final Set<Long> pending = ConcurrentHashMap.newKeySet();
     private final Set<Long> missing = ConcurrentHashMap.newKeySet();
-    private final ExecutorService loader = Executors.newFixedThreadPool(2, r -> {
+    /** Newest request first: tiles you look at now load before tiles you scrolled past. */
+    private static final class NewestFirstQueue extends LinkedBlockingDeque<Runnable> {
+        @Override
+        public boolean offer(Runnable r) {
+            return offerFirst(r);
+        }
+    }
+
+    private final ExecutorService loader = new ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS, new NewestFirstQueue(), r -> {
         Thread t = new Thread(r, "pathfinder-tiles");
         t.setDaemon(true);
         return t;
     });
+    private final Rect srcRect = new Rect();
 
     private double centerLat = Tanzania.CENTER_LAT, centerLon = Tanzania.CENTER_LON, zoom = 6;
     private float rotation = 0;
@@ -268,10 +280,11 @@ final class MapView extends View {
         int z = (int) Math.max(store.minZoom(), Math.min(store.maxZoom(), Math.round(zoom) - shift));
         double scale = Math.pow(2, zoom - z);
         double cxz = Mercator.x(centerLon, z), cyz = Mercator.y(centerLat, z);
-        double radius = Math.hypot(w, h) / 2.0 / scale;
+        boolean upright = Math.abs(rotation) < 0.5f;
+        double radiusX = (upright ? w : Math.hypot(w, h)) / 2.0 / scale, radiusY = (upright ? h : Math.hypot(w, h)) / 2.0 / scale;
         int n = 1 << z;
-        int tx0 = Math.max(0, (int) Math.floor((cxz - radius) / Mercator.TILE)), tx1 = Math.min(n - 1, (int) Math.floor((cxz + radius) / Mercator.TILE));
-        int ty0 = Math.max(0, (int) Math.floor((cyz - radius) / Mercator.TILE)), ty1 = Math.min(n - 1, (int) Math.floor((cyz + radius) / Mercator.TILE));
+        int tx0 = Math.max(0, (int) Math.floor((cxz - radiusX) / Mercator.TILE)), tx1 = Math.min(n - 1, (int) Math.floor((cxz + radiusX) / Mercator.TILE));
+        int ty0 = Math.max(0, (int) Math.floor((cyz - radiusY) / Mercator.TILE)), ty1 = Math.min(n - 1, (int) Math.floor((cyz + radiusY) / Mercator.TILE));
         if ((long) (tx1 - tx0 + 1) * (ty1 - ty0 + 1) > MAX_TILES_PER_DRAW) return;
         float size = (float) (Mercator.TILE * scale);
         for (int ty = ty0; ty <= ty1; ty++) {
@@ -283,10 +296,37 @@ final class MapView extends View {
                     float left = (float) ((tx * (double) Mercator.TILE - cxz) * scale), top = (float) ((ty * (double) Mercator.TILE - cyz) * scale);
                     rect.set(left, top, left + size, top + size);
                     canvas.drawBitmap(b, null, rect, tilePaint);
-                } else if (!missing.contains(key)) {
-                    request(store, key, z, tx, ty);
+                } else {
+                    float left = (float) ((tx * (double) Mercator.TILE - cxz) * scale), top = (float) ((ty * (double) Mercator.TILE - cyz) * scale);
+                    rect.set(left, top, left + size, top + size);
+                    drawCoarser(canvas, store, z, tx, ty);
+                    if (!missing.contains(key)) {
+                        request(store, key, z, tx, ty);
+                        // also fetch a much bigger, coarser tile: it covers the screen with one small download
+                        int up = Math.min(3, z - store.minZoom());
+                        if (up > 0) {
+                            int pz = z - up, ptx = tx >> up, pty = ty >> up;
+                            long pkey = ((long) pz << 48) | ((long) ptx << 24) | pty;
+                            if (cache.get(pkey) == null && !missing.contains(pkey) && store.covers(pz, ptx, pty)) request(store, pkey, pz, ptx, pty);
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    /** While a tile loads, show the blurry part of a bigger tile we already have (into the current rect). */
+    private void drawCoarser(Canvas canvas, TileSource store, int z, int tx, int ty) {
+        for (int up = 1; up <= 4; up++) {
+            int pz = z - up;
+            if (pz < store.minZoom()) return;
+            Bitmap pb = cache.get(((long) pz << 48) | ((long) (tx >> up) << 24) | (ty >> up));
+            if (pb == null) continue;
+            int part = Math.max(1, pb.getWidth() >> up), partH = Math.max(1, pb.getHeight() >> up);
+            int sx = (tx & ((1 << up) - 1)) * part, sy = (ty & ((1 << up) - 1)) * partH;
+            srcRect.set(sx, sy, sx + part, sy + partH);
+            canvas.drawBitmap(pb, srcRect, rect, tilePaint);
+            return;
         }
     }
 

@@ -28,7 +28,21 @@ final class Ui {
     static int BG = 0xFFE8EEF1;
     static boolean dark;
 
+    static final int THEME_SYSTEM = 0, THEME_LIGHT = 1, THEME_DARK = 2;
+
+    static int themeMode(Context c) {
+        return c.getSharedPreferences("pathfinder_ui", Context.MODE_PRIVATE).getInt("theme", THEME_SYSTEM);
+    }
+
+    static void setThemeMode(Context c, int mode) {
+        c.getSharedPreferences("pathfinder_ui", Context.MODE_PRIVATE).edit().putInt("theme", mode).apply();
+    }
+
+    /** Dark when the user chose Dark, or chose System and the phone is in dark mode. */
     static boolean isNight(Context c) {
+        int mode = themeMode(c);
+        if (mode == THEME_DARK) return true;
+        if (mode == THEME_LIGHT) return false;
         return (c.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
     }
 

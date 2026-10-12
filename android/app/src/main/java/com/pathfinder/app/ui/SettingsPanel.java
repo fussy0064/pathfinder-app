@@ -23,8 +23,9 @@ import com.pathfinder.app.core.Strings;
 /** Language, voice guidance, map rotation and the optional DeepSeek AI assistant. Full screen. */
 final class SettingsPanel extends FrameLayout {
     private final Controller c;
-    private final TextView title, languageLabel, voiceWarning, privacy, offlineNote;
-    private final Button english, swahili, testVoice, save, test, remove;
+    private final TextView title, languageLabel, themeLabel, voiceWarning, privacy, offlineNote;
+    private final Button english, swahili, themeSystem, themeLight, themeDark, testVoice, save, test, remove;
+    private Runnable onThemeChanged;
     private final Switch voice, headingUp, ai;
     private final EditText key;
     private final LinearLayout aiBox;
@@ -67,6 +68,20 @@ final class SettingsPanel extends FrameLayout {
         langRow.addView(Ui.spacer(ctx, 8));
         langRow.addView(swahili, Ui.weight(1));
         body.addView(langRow, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        body.addView(divider(ctx));
+
+        themeLabel = Ui.text(ctx, "", 16, Ui.TEXT, true);
+        body.addView(themeLabel);
+        LinearLayout themeRow = Ui.row(ctx);
+        themeSystem = Ui.button(ctx, "", false, v -> chooseTheme(Ui.THEME_SYSTEM));
+        themeLight = Ui.button(ctx, "", false, v -> chooseTheme(Ui.THEME_LIGHT));
+        themeDark = Ui.button(ctx, "", false, v -> chooseTheme(Ui.THEME_DARK));
+        themeRow.addView(themeSystem, Ui.weight(1));
+        themeRow.addView(Ui.spacer(ctx, 8));
+        themeRow.addView(themeLight, Ui.weight(1));
+        themeRow.addView(Ui.spacer(ctx, 8));
+        themeRow.addView(themeDark, Ui.weight(1));
+        body.addView(themeRow, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         body.addView(divider(ctx));
 
         voice = new Switch(ctx);
@@ -134,6 +149,16 @@ final class SettingsPanel extends FrameLayout {
         return d;
     }
 
+    void setOnThemeChanged(Runnable r) {
+        onThemeChanged = r;
+    }
+
+    private void chooseTheme(int mode) {
+        Ui.setThemeMode(getContext(), mode);
+        refresh();
+        if (onThemeChanged != null) onThemeChanged.run();
+    }
+
     private void toast(String text) {
         Toast.makeText(getContext(), text, Toast.LENGTH_SHORT).show();
     }
@@ -162,6 +187,14 @@ final class SettingsPanel extends FrameLayout {
         languageLabel.setText(t.get("language"));
         restyle(english, !sw);
         restyle(swahili, sw);
+        int mode = Ui.themeMode(getContext());
+        themeLabel.setText(t.get("theme"));
+        themeSystem.setText(t.get("themeSystem"));
+        themeLight.setText(t.get("themeLight"));
+        themeDark.setText(t.get("themeDark"));
+        restyle(themeSystem, mode == Ui.THEME_SYSTEM);
+        restyle(themeLight, mode == Ui.THEME_LIGHT);
+        restyle(themeDark, mode == Ui.THEME_DARK);
         voice.setText(t.get("voiceGuidance"));
         voice.setChecked(c.prefs().voiceOn());
         boolean missing = c.prefs().voiceOn() && !c.voiceAvailable;

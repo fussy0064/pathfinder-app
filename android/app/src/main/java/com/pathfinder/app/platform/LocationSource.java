@@ -22,7 +22,7 @@ public final class LocationSource implements LocationListener {
     private long lastGpsMs = -100000;
     /** Online build only: Wi-Fi/cell location gives a fast first position while GPS warms up. */
     private final boolean useNetwork;
-    private static final long STALE_MS = 30 * 60 * 1000L;
+    private static final long STALE_MS = 6 * 3600 * 1000L; // a position from the last 6 hours is shown at once
 
     public LocationSource(Context context, Controller controller) {
         this.context = context;
@@ -47,19 +47,20 @@ public final class LocationSource implements LocationListener {
             // keep listening: the user may switch GPS on
         }
         try {
-            manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 3f, this, Looper.getMainLooper());
+            manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper());
         } catch (RuntimeException e) {
             controller.setLocationState(Controller.LocationState.SERVICE_OFF);
             return;
         }
         if (useNetwork) {
-            try {
-                if (manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                    manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 10f, this, Looper.getMainLooper());
+            for (String name : quickProviders()) {
+                try {
+                    if (manager.isProviderEnabled(name)) manager.requestLocationUpdates(name, 1000L, 0f, this, Looper.getMainLooper());
+                } catch (RuntimeException ignored) {
+                    // provider not on this phone: skip
                 }
-            } catch (RuntimeException ignored) {
-                // no network provider: GPS only
             }
+            helpGpsColdStart();
         }
         running = true;
         if (manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) controller.setLocationState(Controller.LocationState.READY);
@@ -67,13 +68,29 @@ public final class LocationSource implements LocationListener {
         requestQuickFix();
     }
 
+    /** Fastest first: Android 12+ fused provider (mixes GPS, Wi-Fi, cell), then Wi-Fi/cell, then GPS. */
+    private static String[] quickProviders() {
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            return new String[] {LocationManager.FUSED_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER};
+        }
+        return new String[] {LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER};
+    }
+
+    /** Ask the GPS chip to refresh its satellite help data (many phones support this; others ignore it). */
+    private void helpGpsColdStart() {
+        try {
+            manager.sendExtraCommand(LocationManager.GPS_PROVIDER, "force_time_injection", null);
+            manager.sendExtraCommand(LocationManager.GPS_PROVIDER, "force_xtra_injection", null);
+        } catch (RuntimeException ignored) {
+            // not supported on this phone
+        }
+    }
+
     /** Android 11+: ask once for a fix right now instead of waiting for the next update. */
     @SuppressLint("MissingPermission")
     private void requestQuickFix() {
         if (android.os.Build.VERSION.SDK_INT < 30) return;
-        String[] providers = useNetwork
-                ? new String[] {LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER}
-                : new String[] {LocationManager.GPS_PROVIDER};
+        String[] providers = useNetwork ? quickProviders() : new String[] {LocationManager.GPS_PROVIDER};
         for (String name : providers) {
             try {
                 if (!manager.isProviderEnabled(name)) continue;
@@ -90,7 +107,7 @@ public final class LocationSource implements LocationListener {
     @SuppressLint("MissingPermission")
     private void pushLastKnown() {
         Location best = null;
-        String[] providers = {LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER};
+        String[] providers = {LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER, "fused"};
         for (String name : providers) {
             try {
                 Location l = manager.getLastKnownLocation(name);

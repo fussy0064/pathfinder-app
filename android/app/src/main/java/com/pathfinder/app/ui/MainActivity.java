@@ -107,6 +107,10 @@ public final class MainActivity extends Activity implements Controller.Listener 
 
         search = new SearchPanel(this, ctl, place -> ctl.chooseDestination(place));
         settings = new SettingsPanel(this, ctl);
+        settings.setOnThemeChanged(() -> {
+            themeChanged = Ui.isNight(this) != nightAtCreate;
+            applyThemeChange();
+        });
         dataPanel = new DataPanel(this, ctl);
         for (View panel : new View[] {search, settings, dataPanel}) {
             root.addView(panel, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
