@@ -71,7 +71,7 @@ public final class DeepSeekClient implements AiService {
     private final String model;
 
     public DeepSeekClient() {
-        this("https://api.deepseek.com/chat/completions", "deepseek-chat", false);
+        this("https://api.deepseek.com/chat/completions", "deepseek-flash", false); // the old name "deepseek-chat" was retired on 2026-07-24
     }
 
     /** allowInsecureForTests lets unit tests talk to a local server. Never use it in the app. */
@@ -150,6 +150,7 @@ public final class DeepSeekClient implements AiService {
         String body = "{\"model\":" + MiniJson.quote(model)
                 + ",\"messages\":[{\"role\":\"system\",\"content\":" + MiniJson.quote(buildSystemPrompt())
                 + "},{\"role\":\"user\",\"content\":" + MiniJson.quote(text) + "}]"
+                + ",\"thinking\":{\"type\":\"disabled\"}" // thinking mode is on by default: it would use up the small token limit
                 + ",\"temperature\":0,\"max_tokens\":120,\"stream\":false,\"response_format\":{\"type\":\"json_object\"}}";
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         HttpURLConnection c = null;
