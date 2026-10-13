@@ -36,7 +36,9 @@ final class SearchPanel extends FrameLayout {
     private final LinearLayout list;
     private final LinearLayout topBar;
     private final View aiButton;
+    private final View micButton;
     private Runnable pending;
+    private Runnable onVoice;
     private int token;
 
     SearchPanel(Context ctx, Controller controller, Host host) {
@@ -75,6 +77,11 @@ final class SearchPanel extends FrameLayout {
             return false;
         });
         topBar.addView(edit, Ui.weight(1));
+        micButton = Icons.roundButton(ctx, Icons.Kind.MIC, Ui.PRIMARY, Ui.SURFACE, controller.t().get("voiceSearch"), v -> {
+            if (onVoice != null) onVoice.run();
+        });
+        micButton.setVisibility(GONE); // shown when the activity can start voice input
+        topBar.addView(micButton);
         aiButton = Icons.roundButton(ctx, Icons.Kind.SPARKLE, Ui.PRIMARY, Ui.SURFACE, controller.t().get("askAi"), v -> askAi());
         topBar.addView(aiButton);
         topBar.addView(Icons.roundButton(ctx, Icons.Kind.CLOSE, Ui.TEXT, Ui.SURFACE, controller.t().get("clear"), v -> edit.setText("")));
@@ -85,6 +92,22 @@ final class SearchPanel extends FrameLayout {
         list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list);
         column.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+    }
+
+    /** The activity starts the phone's speech recognizer when the mic button is tapped. */
+    void setOnVoice(Runnable r) {
+        onVoice = r;
+        micButton.setVisibility(r == null ? GONE : VISIBLE);
+    }
+
+    /** Words heard by the speech recognizer: put them in the box and search (AI search when it is on). */
+    void setQueryFromVoice(String spoken) {
+        if (spoken == null) return;
+        String text = spoken.trim();
+        if (text.isEmpty()) return;
+        edit.setText(text.length() > 200 ? text.substring(0, 200) : text);
+        edit.setSelection(edit.getText().length());
+        if (aiReady()) askAi();
     }
 
     void setInsets(int top, int bottom) {

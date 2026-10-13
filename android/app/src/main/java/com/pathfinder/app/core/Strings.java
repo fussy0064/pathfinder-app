@@ -86,6 +86,9 @@ public final class Strings {
         EN.put("downloadProgress", "{file}  {done} of {total}");
         EN.put("settings", "Settings");
         EN.put("language", "Language");
+        EN.put("voiceSearch", "Speak");
+        EN.put("voicePrompt", "Say where you want to go");
+        EN.put("voiceInputUnavailable", "Voice input is not available on this phone.");
         EN.put("editPin", "Edit pin");
         EN.put("pickup", "Pickup");
         EN.put("dropPinTitle", "Destination pin");
@@ -215,6 +218,9 @@ public final class Strings {
         SW.put("downloadProgress", "{file}  {done} kati ya {total}");
         SW.put("settings", "Mipangilio");
         SW.put("language", "Lugha");
+        SW.put("voiceSearch", "Sema");
+        SW.put("voicePrompt", "Sema unakotaka kwenda wapi");
+        SW.put("voiceInputUnavailable", "Kutamka hakupatikani kwenye simu hii.");
         SW.put("editPin", "Hariri alama");
         SW.put("pickup", "Kuchukua");
         SW.put("dropPinTitle", "Alama ya mwisho");

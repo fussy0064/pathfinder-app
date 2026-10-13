@@ -46,6 +46,7 @@ import java.util.concurrent.Executors;
 /** The only screen: map + panels. All logic lives in Controller. */
 public final class MainActivity extends Activity implements Controller.Listener {
     private static final int REQUEST_LOCATION = 1;
+    private static final int REQUEST_VOICE = 2;
 
     private Controller ctl;
     private AndroidVoice voice;
@@ -149,6 +150,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
         root.addView(fabColumn, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.END));
 
         search = new SearchPanel(this, ctl, place -> ctl.chooseDestination(place));
+        search.setOnVoice(this::startVoiceSearch);
         settings = new SettingsPanel(this, ctl);
         settings.setOnThemeChanged(() -> {
             themeChanged = Ui.isNight(this) != nightAtCreate;
@@ -418,6 +420,31 @@ public final class MainActivity extends Activity implements Controller.Listener 
         search.refresh();
         settings.refresh();
         dataPanel.refresh();
+    }
+
+    // ---- voice input (the phone's own speech recognizer, no extra library) ----
+
+    private void startVoiceSearch() {
+        Strings t = ctl.t();
+        Intent i = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        i.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        i.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, ctl.prefs().lang().voiceTags[0]);
+        i.putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, t.get("voicePrompt"));
+        i.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+        try {
+            startActivityForResult(i, REQUEST_VOICE);
+        } catch (android.content.ActivityNotFoundException e) {
+            android.widget.Toast.makeText(this, t.get("voiceInputUnavailable"), android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_VOICE || resultCode != RESULT_OK || data == null) return;
+        java.util.ArrayList<String> heard = data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS);
+        if (heard != null && !heard.isEmpty()) search.setQueryFromVoice(heard.get(0));
     }
 
     // ---- pin editing ----

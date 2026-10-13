@@ -18,7 +18,7 @@ import com.pathfinder.app.core.TurnType;
 final class Icons {
     private Icons() {}
 
-    enum Kind { LOCATE, VOICE_ON, VOICE_OFF, NORTH_UP, DIRECTION_UP, SETTINGS, BACK, CLOSE, SEARCH, SPARKLE, TURN_ARROW, FLAG }
+    enum Kind { LOCATE, VOICE_ON, VOICE_OFF, NORTH_UP, DIRECTION_UP, SETTINGS, BACK, CLOSE, SEARCH, SPARKLE, MIC, TURN_ARROW, FLAG }
 
     static final class Icon extends Drawable {
         private final Kind kind;
@@ -101,6 +101,12 @@ final class Icons {
                 case SPARKLE:
                     sparkle(c, 0, 0, 10 * u);
                     sparkle(c, 7 * u, -7 * u, 4 * u);
+                    break;
+                case MIC:
+                    c.drawRoundRect(new android.graphics.RectF(-3.5f * u, -11 * u, 3.5f * u, 2 * u), 3.5f * u, 3.5f * u, fill);
+                    c.drawArc(new android.graphics.RectF(-7 * u, -6 * u, 7 * u, 7 * u), 0, 180, false, stroke);
+                    c.drawLine(0, 7 * u, 0, 11 * u, stroke);
+                    c.drawLine(-4 * u, 11 * u, 4 * u, 11 * u, stroke);
                     break;
                 case FLAG:
                     c.drawLine(-6 * u, -10 * u, -6 * u, 10 * u, stroke);
