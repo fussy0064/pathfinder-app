@@ -199,12 +199,13 @@ public final class MainActivity extends Activity implements Controller.Listener 
         setContentView(root);
 
         ctl.addListener(this);
-        ctl.init();
+        // start the position search first: loading the map data below takes a moment on the main thread
         if (location.hasPermission()) location.start();
         else {
             askedBefore = true;
             requestPermissions(new String[] {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQUEST_LOCATION);
         }
+        ctl.init();
         render();
     }
 

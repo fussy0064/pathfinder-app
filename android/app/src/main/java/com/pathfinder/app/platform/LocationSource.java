@@ -13,67 +13,82 @@ import android.os.SystemClock;
 import com.pathfinder.app.core.Controller;
 import com.pathfinder.app.core.Fix;
 
-/** GPS from the phone's LocationManager (no Google Play Services needed, nothing leaves the phone). */
+/**
+ * Position from the phone's LocationManager (no Google Play Services library).
+ * Uses GPS plus the phone's fast Wi-Fi/cell/fused location, so the first position appears quickly.
+ * Works with "Approximate" location too (Wi-Fi/cell only).
+ */
 public final class LocationSource implements LocationListener {
     private final Context context;
     private final LocationManager manager;
     private final Controller controller;
     private boolean running;
     private long lastGpsMs = -100000;
-    /** Online build only: Wi-Fi/cell location gives a fast first position while GPS warms up. */
-    private final boolean useNetwork;
     private static final long STALE_MS = 6 * 3600 * 1000L; // a position from the last 6 hours is shown at once
 
     public LocationSource(Context context, Controller controller) {
         this.context = context;
         this.controller = controller;
         this.manager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
-        this.useNetwork = context.getPackageName().endsWith(".online");
     }
 
+    /** True when the user allowed Precise or Approximate location. */
     public boolean hasPermission() {
+        return fine() || context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean fine() {
         return context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
+    private boolean isOn(String provider) {
+        try {
+            return manager != null && manager.isProviderEnabled(provider);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** Wi-Fi/cell and (Android 12+) fused providers: fast first position, no GPS needed. */
+    private static String[] fastProviders() {
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            return new String[] {LocationManager.FUSED_PROVIDER, LocationManager.NETWORK_PROVIDER};
+        }
+        return new String[] {LocationManager.NETWORK_PROVIDER};
+    }
+
+    private void refreshState() {
+        boolean any = fine() && isOn(LocationManager.GPS_PROVIDER);
+        for (String name : fastProviders()) any |= isOn(name);
+        controller.setLocationState(any ? Controller.LocationState.READY : Controller.LocationState.SERVICE_OFF);
+    }
+
     @SuppressLint("MissingPermission")
+    private void listen(String provider) {
+        try {
+            if (isOn(provider)) manager.requestLocationUpdates(provider, 1000L, 0f, this, Looper.getMainLooper());
+        } catch (RuntimeException ignored) {
+            // provider not on this phone: skip it, the others still work
+        }
+    }
+
     public void start() {
         if (running) return;
         if (!hasPermission()) {
             controller.setLocationState(Controller.LocationState.DENIED);
             return;
         }
-        if (manager == null || !manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            controller.setLocationState(Controller.LocationState.SERVICE_OFF);
-            // keep listening: the user may switch GPS on
-        }
-        try {
-            manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper());
-        } catch (RuntimeException e) {
+        if (manager == null) {
             controller.setLocationState(Controller.LocationState.SERVICE_OFF);
             return;
         }
-        if (useNetwork) {
-            for (String name : quickProviders()) {
-                try {
-                    if (manager.isProviderEnabled(name)) manager.requestLocationUpdates(name, 1000L, 0f, this, Looper.getMainLooper());
-                } catch (RuntimeException ignored) {
-                    // provider not on this phone: skip
-                }
-            }
-            helpGpsColdStart();
-        }
+        if (fine()) listen(LocationManager.GPS_PROVIDER);
+        for (String name : fastProviders()) listen(name);
+        if (fine()) helpGpsColdStart();
         running = true;
-        if (manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) controller.setLocationState(Controller.LocationState.READY);
+        refreshState(); // keep listening even when off: the user may switch location on
         pushLastKnown();
         requestQuickFix();
-    }
-
-    /** Fastest first: Android 12+ fused provider (mixes GPS, Wi-Fi, cell), then Wi-Fi/cell, then GPS. */
-    private static String[] quickProviders() {
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            return new String[] {LocationManager.FUSED_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER};
-        }
-        return new String[] {LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER};
     }
 
     /** Ask the GPS chip to refresh its satellite help data (many phones support this; others ignore it). */
@@ -90,10 +105,11 @@ public final class LocationSource implements LocationListener {
     @SuppressLint("MissingPermission")
     private void requestQuickFix() {
         if (android.os.Build.VERSION.SDK_INT < 30) return;
-        String[] providers = useNetwork ? quickProviders() : new String[] {LocationManager.GPS_PROVIDER};
+        java.util.List<String> providers = new java.util.ArrayList<>(java.util.Arrays.asList(fastProviders()));
+        if (fine()) providers.add(LocationManager.GPS_PROVIDER);
         for (String name : providers) {
             try {
-                if (!manager.isProviderEnabled(name)) continue;
+                if (!isOn(name)) continue;
                 manager.getCurrentLocation(name, null, context.getMainExecutor(), l -> {
                     if (l != null && running) onLocationChanged(l);
                 });
@@ -143,12 +159,12 @@ public final class LocationSource implements LocationListener {
 
     @Override
     public void onProviderEnabled(String provider) {
-        controller.setLocationState(Controller.LocationState.READY);
+        refreshState();
     }
 
     @Override
     public void onProviderDisabled(String provider) {
-        controller.setLocationState(Controller.LocationState.SERVICE_OFF);
+        refreshState(); // one provider off (for example Wi-Fi location) must not hide a working GPS
     }
 
     @Override
