@@ -23,6 +23,7 @@ import javax.crypto.spec.GCMParameterSpec;
 final class SecretStore {
     private static final String ALIAS = "pathfinder_ai_key";
     private static final String PREF = "ai_key_enc";
+    private static final String PREF_SOFT = "ai_key_soft"; // used only when the phone's Keystore does not work
     private static final int IV_BYTES = 12;
 
     private final SharedPreferences prefs;
@@ -32,10 +33,22 @@ final class SecretStore {
     }
 
     boolean has() {
-        return prefs.contains(PREF);
+        return prefs.contains(PREF) || prefs.contains(PREF_SOFT);
     }
 
+    /** Hardware-backed Keystore when it works. Some phones have a broken Keystore: then keep it in the app's private storage. */
     void save(String secret) throws GeneralSecurityException {
+        try {
+            saveEncrypted(secret);
+            prefs.edit().remove(PREF_SOFT).apply();
+        } catch (GeneralSecurityException | RuntimeException e) {
+            prefs.edit().remove(PREF)
+                    .putString(PREF_SOFT, Base64.encodeToString(secret.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP))
+                    .apply();
+        }
+    }
+
+    private void saveEncrypted(String secret) throws GeneralSecurityException {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, keyOrCreate());
         byte[] iv = cipher.getIV();
@@ -49,6 +62,8 @@ final class SecretStore {
     /** Returns null when nothing is saved or the stored value cannot be decrypted. */
     String read() {
         try {
+            String soft = prefs.getString(PREF_SOFT, null);
+            if (soft != null) return new String(Base64.decode(soft, Base64.NO_WRAP), StandardCharsets.UTF_8);
             String stored = prefs.getString(PREF, null);
             if (stored == null) return null;
             byte[] all = Base64.decode(stored, Base64.NO_WRAP);
@@ -56,13 +71,13 @@ final class SecretStore {
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, keyOrCreate(), new GCMParameterSpec(128, Arrays.copyOfRange(all, 0, IV_BYTES)));
             return new String(cipher.doFinal(all, IV_BYTES, all.length - IV_BYTES), StandardCharsets.UTF_8);
-        } catch (GeneralSecurityException | IllegalArgumentException e) {
+        } catch (GeneralSecurityException | RuntimeException e) {
             return null;
         }
     }
 
     void clear() {
-        prefs.edit().remove(PREF).apply();
+        prefs.edit().remove(PREF).remove(PREF_SOFT).apply();
         try {
             KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
             ks.load(null);

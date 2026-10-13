@@ -39,7 +39,7 @@ public final class AndroidPrefs implements Ports.Prefs {
     @Override public void saveApiKey(String key) {
         try {
             secret.save(key);
-        } catch (GeneralSecurityException e) {
+        } catch (GeneralSecurityException | RuntimeException e) {
             secret.clear(); // do not keep a half-saved key
         }
     }

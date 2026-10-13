@@ -151,11 +151,13 @@ public final class Controller {
 
     public void setHeadingUp(boolean on) { prefs.setHeadingUp(on); changed(); }
     public void setAiOn(boolean on) { prefs.setAiOn(on); changed(); }
-    public void saveApiKey(String key) {
+    /** Returns true when the key was accepted and saved. */
+    public boolean saveApiKey(String key) {
         String k = key == null ? "" : key.trim();
-        if (k.isEmpty() || k.length() > 200 || k.matches(".*\\s.*")) return; // keys never contain spaces
+        if (k.isEmpty() || k.length() > 200 || k.matches(".*\\s.*")) return false; // keys never contain spaces
         prefs.saveApiKey(k);
         changed();
+        return prefs.hasApiKey();
     }
     public void removeApiKey() { prefs.removeApiKey(); changed(); }
 

@@ -124,9 +124,9 @@ final class SettingsPanel extends FrameLayout {
         aiBox.addView(key, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout buttons = Ui.row(ctx);
         save = Ui.button(ctx, "", true, v -> {
-            c.saveApiKey(key.getText().toString());
-            key.setText("");
-            toast(c.t().get("saved"));
+            boolean ok = c.saveApiKey(key.getText().toString());
+            if (ok) key.setText("");
+            toast(c.t().get(ok ? "saved" : "keyNotSaved"));
         });
         test = Ui.button(ctx, "", false, v -> runTest());
         remove = Ui.button(ctx, "", false, v -> c.removeApiKey());

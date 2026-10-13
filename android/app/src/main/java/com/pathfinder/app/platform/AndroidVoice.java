@@ -66,6 +66,16 @@ public final class AndroidVoice implements Ports.Voice {
                 }
             }
         }
+        // No voice for the chosen language: speak with an English voice (better than silence).
+        // We still return false so the app tells the user how to install the right voice.
+        for (String tag : new String[] {"en-US", "en-GB", "en"}) {
+            Locale locale = Locale.forLanguageTag(tag);
+            int result = tts.isLanguageAvailable(locale);
+            if (result >= TextToSpeech.LANG_AVAILABLE && tts.setLanguage(locale) >= 0) {
+                available = true;
+                break;
+            }
+        }
         return false;
     }
 
