@@ -65,7 +65,10 @@ public final class Controller {
     /** Smoothed speed (m/s) while the user is moving; -1 until we have measured it. */
     private double speedAvgMs = -1;
     private long progressAtNs;
-    private static final double MIN_MOVING_MS = 1.0, MAX_SPEED_MS = 70.0;
+    private static final double MIN_MOVING_MS = 0.5, MAX_SPEED_MS = 70.0; // 0.5 m/s = 1.8 km/h: slow walking counts as moving
+    private double anchorLat, anchorLon;
+    private long anchorNs, nextEtaTalkNs;
+    private int etaMilestone;
     public RouteProgress progress;
     public long calcMillis = -1;
     public boolean rerouting;
@@ -274,7 +277,7 @@ public final class Controller {
         if (r == null) return Double.NaN;
         double remaining = progress != null ? progress.remainingM : r.distanceM;
         double planned = r.timeS > 0 && r.distanceM > 0 ? r.distanceM / r.timeS : 10.0;
-        double v = Math.max(speedAvgMs > 0 ? speedAvgMs : planned, 1.0);
+        double v = Math.max(speedAvgMs > 0 ? speedAvgMs : planned, 0.3);
         if (progress != null && speedAvgMs > 0) {
             double since = Math.min(3.0, (System.nanoTime() - progressAtNs) / 1e9); // stop guessing if GPS is lost
             remaining = Math.max(0.0, remaining - v * since);
@@ -282,17 +285,71 @@ public final class Controller {
         return remaining / v;
     }
 
+    /** Says the time left, for example when the user taps the time bar. */
+    public void speakEta() {
+        double eta = etaSeconds();
+        if (Double.isNaN(eta) || Double.isInfinite(eta)) return;
+        speak(t().get("vEta", "time", Guidance.formatDuration(t(), eta)));
+    }
+
+    /** Automatic time-left voice: every 10 minutes, then at about 5 minutes and 1 minute. Never over a turn instruction. */
+    private void maybeSpeakEta() {
+        double eta = etaSeconds();
+        if (Double.isNaN(eta) || Double.isInfinite(eta)) return;
+        if (eta <= 70) {
+            if (etaMilestone < 2) {
+                etaMilestone = 2;
+                speakEta();
+            }
+        } else if (eta <= 320) {
+            if (etaMilestone < 1) {
+                etaMilestone = 1;
+                speakEta();
+            }
+        } else if (System.nanoTime() >= nextEtaTalkNs) {
+            nextEtaTalkNs = System.nanoTime() + 600_000_000_000L;
+            speakEta();
+        }
+    }
+
     public void setLocationState(LocationState s) {
         locationState = s;
         changed();
     }
 
+    /**
+     * Speed in m/s, or -1 when unknown.
+     * 1) The phone's own GPS speed (accurate even when the position is weak).
+     * 2) If the phone gives no speed (Wi-Fi/cell position, weak GPS): from how far the position moved in 3+ seconds.
+     *    A move smaller than the GPS noise counts as standing still.
+     */
+    private double measuredSpeed(Fix f) {
+        if (f.speedMs >= 0 && f.accuracyM <= 200) return f.speedMs;
+        long now = System.nanoTime();
+        if (anchorNs == 0) {
+            anchorLat = f.lat;
+            anchorLon = f.lon;
+            anchorNs = now;
+            return -1;
+        }
+        double dt = (now - anchorNs) / 1e9;
+        if (dt < 3.0) return -1; // a longer window gives less noise
+        double dy = Math.toRadians(f.lat - anchorLat), dx = Math.toRadians(f.lon - anchorLon) * Math.cos(Math.toRadians((f.lat + anchorLat) / 2));
+        double d = 6371000.0 * Math.sqrt(dx * dx + dy * dy);
+        anchorLat = f.lat;
+        anchorLon = f.lon;
+        anchorNs = now;
+        if (f.accuracyM > 60) return -1; // too weak to trust
+        return d > 2.0 * Math.max(f.accuracyM, 5.0) ? d / dt : 0.0;
+    }
+
     public void onFix(Fix f) {
         if (!GeoPoint.valid(f.lat, f.lon)) return;
         user = new GeoPoint(f.lat, f.lon);
-        if (f.speedMs >= MIN_MOVING_MS && f.speedMs <= MAX_SPEED_MS && f.accuracyM <= MAX_ACCURACY_M) {
-            // about the last 10 seconds of driving: smooth, but follows traffic
-            speedAvgMs = speedAvgMs < 0 ? f.speedMs : speedAvgMs * 0.9 + f.speedMs * 0.1;
+        double v = measuredSpeed(f);
+        if (v >= MIN_MOVING_MS && v <= MAX_SPEED_MS) {
+            // about the last 5-10 seconds: smooth, but follows traffic and walking
+            speedAvgMs = speedAvgMs < 0 ? v : speedAvgMs * 0.8 + v * 0.2;
         }
         if (f.speedMs > 1.0f && f.hasBearing && !Float.isNaN(f.bearingDeg)) gpsHeading = (double) f.bearingDeg; // only meaningful while moving
         if (phase == Phase.NAVIGATING) {
@@ -495,9 +552,12 @@ public final class Controller {
         offCount = 0;
         progress = null;
         speedAvgMs = -1;
+        anchorNs = 0;
         heading = gpsHeading;
         phase = Phase.NAVIGATING;
-        speak(t().get("vNavStart"));
+        nextEtaTalkNs = System.nanoTime() + 600_000_000_000L; // next spoken time-left in 10 minutes
+        etaMilestone = route.timeS <= 70 ? 2 : route.timeS <= 320 ? 1 : 0;
+        speak(t().get("vNavStart") + " " + t().get("vEta", "time", Guidance.formatDuration(t(), route.timeS)));
         changed();
     }
 
@@ -519,6 +579,7 @@ public final class Controller {
                     RouteStep step = r.steps[Math.min(Math.max(pr.nextStep, 0), r.steps.length - 1)];
                     speak(Guidance.phrase(t(), step.type, pr.announce, pr.toNextM));
                 }
+                if (pr.announce == 0) maybeSpeakEta();
                 if (pr.remainingM <= ARRIVE_M) {
                     phase = Phase.ARRIVED;
                     speak(t().get("vArrived"));

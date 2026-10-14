@@ -132,6 +132,7 @@ final class Panels {
         LinearLayout row = Ui.row(ctx);
         TextView etaText = Ui.text(ctx, etaLine(c), 17, Ui.TEXT, true);
         etaText.setTag("eta"); // MainActivity refreshes this text every second
+        etaText.setOnClickListener(v -> c.speakEta()); // tap the time to hear it
         row.addView(etaText, Ui.weight(1));
         row.addView(Ui.button(ctx, t.get("end"), false, v -> onEnd.run()));
         card.addView(row, wide(ctx, 10));

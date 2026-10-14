@@ -140,7 +140,7 @@ public final class LocationSource implements LocationListener {
 
     private void push(Location l) {
         controller.onFix(new Fix(l.getLatitude(), l.getLongitude(), l.hasAccuracy() ? l.getAccuracy() : 999f,
-                l.hasSpeed() ? l.getSpeed() : 0f, l.getBearing(), l.hasBearing()));
+                l.hasSpeed() ? l.getSpeed() : -1f, l.getBearing(), l.hasBearing()));
     }
 
     public void stop() {

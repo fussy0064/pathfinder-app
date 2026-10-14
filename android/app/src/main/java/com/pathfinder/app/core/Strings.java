@@ -86,6 +86,7 @@ public final class Strings {
         EN.put("downloadProgress", "{file}  {done} of {total}");
         EN.put("settings", "Settings");
         EN.put("language", "Language");
+        EN.put("vEta", "About {time} to arrival.");
         EN.put("minSec", "{m} min {s} s");
         EN.put("secOnly", "{s} s");
         EN.put("arriveAt", "Arrive {time}");
@@ -222,6 +223,7 @@ public final class Strings {
         SW.put("downloadProgress", "{file}  {done} kati ya {total}");
         SW.put("settings", "Mipangilio");
         SW.put("language", "Lugha");
+        SW.put("vEta", "Takriban {time} kufika.");
         SW.put("minSec", "dk {m} s {s}");
         SW.put("secOnly", "s {s}");
         SW.put("arriveAt", "Kufika {time}");
