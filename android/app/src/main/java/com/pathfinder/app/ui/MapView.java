@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.animation.ValueAnimator;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.util.LruCache;
@@ -14,6 +15,7 @@ import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 
+import com.pathfinder.app.core.Guidance;
 import com.pathfinder.app.core.Mercator;
 import com.pathfinder.app.core.Tanzania;
 import com.pathfinder.app.platform.TileSource;
@@ -56,6 +58,8 @@ final class MapView extends View {
         return t;
     });
     private final Rect srcRect = new Rect();
+    private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private ValueAnimator camAnim;
 
     private double centerLat = Tanzania.CENTER_LAT, centerLon = Tanzania.CENTER_LON, zoom = 6;
     private float rotation = 0;
@@ -184,6 +188,7 @@ final class MapView extends View {
     }
 
     void setCamera(double lat, double lon, double zoomLevel, float rotationDeg) {
+        if (camAnim != null) camAnim.cancel();
         centerLat = Tanzania.clampLat(lat);
         centerLon = Tanzania.clampLon(lon);
         zoom = clampZoom(zoomLevel);
@@ -191,7 +196,51 @@ final class MapView extends View {
         invalidate();
     }
 
+    /**
+     * Navigation camera: follows the user smoothly and keeps the user in the lower part of the screen,
+     * so more of the road (and the destination) ahead is visible.
+     */
+    void setNavCamera(double userLat, double userLon, double zoomLevel, float rotationDeg) {
+        double z = clampZoom(zoomLevel);
+        double off = getHeight() * 0.22; // pixels the map centre is ahead of the user
+        double rad = Math.toRadians(rotationDeg);
+        double cx = Mercator.x(userLon, z) - Math.sin(rad) * off;
+        double cy = Mercator.y(userLat, z) - Math.cos(rad) * off;
+        animateCamera(Mercator.lat(cy, z), Mercator.lon(cx, z), z, rotationDeg);
+    }
+
+    private void animateCamera(double lat, double lon, double z, float rotDeg) {
+        final double toLat = Tanzania.clampLat(lat), toLon = Tanzania.clampLon(lon);
+        final double sLat = centerLat, sLon = centerLon, sZoom = zoom, toZoom = z;
+        final float sRot = rotation;
+        final float dRot = ((rotDeg - sRot) % 360f + 540f) % 360f - 180f; // shortest way round
+        if (camAnim != null) camAnim.cancel();
+        boolean far = Math.abs(toLat - sLat) + Math.abs(toLon - sLon) > 0.01 || Math.abs(toZoom - sZoom) > 1.2;
+        if (far || getWidth() == 0) { // big jump (first frame of navigation): no animation
+            centerLat = toLat;
+            centerLon = toLon;
+            zoom = toZoom;
+            rotation = rotDeg;
+            invalidate();
+            return;
+        }
+        ValueAnimator a = ValueAnimator.ofFloat(0f, 1f);
+        a.setDuration(950); // a little less than the 1 second between GPS fixes
+        a.setInterpolator(new android.view.animation.LinearInterpolator());
+        a.addUpdateListener(an -> {
+            float t = (Float) an.getAnimatedValue();
+            centerLat = sLat + (toLat - sLat) * t;
+            centerLon = sLon + (toLon - sLon) * t;
+            zoom = sZoom + (toZoom - sZoom) * t;
+            rotation = sRot + dRot * t;
+            invalidate();
+        });
+        camAnim = a;
+        a.start();
+    }
+
     void setRotation360(float rotationDeg) {
+        if (camAnim != null) camAnim.cancel();
         rotation = rotationDeg;
         invalidate();
     }
@@ -398,6 +447,41 @@ final class MapView extends View {
         canvas.drawPath(path, routeLine);
     }
 
+    /** While navigating and the destination is off screen: a red arrow at the screen edge pointing to it, with the distance. */
+    private void drawDestinationPointer(Canvas canvas, float[] dest, int w, int h, float d) {
+        float m = 28 * d;
+        if (dest[0] >= m && dest[0] <= w - m && dest[1] >= m && dest[1] <= h - m) return; // visible: the pin is enough
+        float[] u = toScreen(userLat, userLon, Mercator.x(centerLon, zoom), Mercator.y(centerLat, zoom), w, h);
+        float dx = dest[0] - u[0], dy = dest[1] - u[1];
+        float len = (float) Math.hypot(dx, dy);
+        if (len < 1f) return;
+        float tx = dx > 0 ? (w - m - u[0]) / dx : dx < 0 ? (m - u[0]) / dx : Float.MAX_VALUE;
+        float ty = dy > 0 ? (h - m - u[1]) / dy : dy < 0 ? (m - u[1]) / dy : Float.MAX_VALUE;
+        float t = Math.min(tx, ty);
+        float qx = u[0] + dx * t, qy = u[1] + dy * t;
+        float ux = dx / len, uy = dy / len;
+        fill.setColor(0xFFC62828);
+        canvas.drawCircle(qx, qy, 15 * d, fill);
+        path.rewind();
+        path.moveTo(qx + ux * 9 * d, qy + uy * 9 * d);
+        path.lineTo(qx - ux * 5 * d - uy * 7 * d, qy - uy * 5 * d + ux * 7 * d);
+        path.lineTo(qx - ux * 5 * d + uy * 7 * d, qy - uy * 5 * d - ux * 7 * d);
+        path.close();
+        fill.setColor(0xFFFFFFFF);
+        canvas.drawPath(path, fill);
+        double cos = Math.cos(Math.toRadians(userLat));
+        double meters = 111320.0 * Math.hypot((destLat - userLat), (destLon - userLon) * cos);
+        String text = Guidance.formatDistance(meters);
+        labelPaint.setTextSize(12 * d);
+        labelPaint.setFakeBoldText(true);
+        labelPaint.setColor(0xFF222222);
+        float tw = labelPaint.measureText(text);
+        float lx = Math.max(4 * d, Math.min(w - tw - 12 * d, qx - ux * 30 * d - tw / 2)), ly = qy - uy * 30 * d;
+        fill.setColor(0xE6FFFFFF);
+        canvas.drawRoundRect(lx - 4 * d, ly - 13 * d, lx + tw + 8 * d, ly + 5 * d, 6 * d, 6 * d, fill);
+        canvas.drawText(text, lx + 2 * d, ly, labelPaint);
+    }
+
     private void drawMarkers(Canvas canvas, double cxw, double cyw, int w, int h) {
         float d = getResources().getDisplayMetrics().density;
         if (hasPickup) {
@@ -420,6 +504,7 @@ final class MapView extends View {
             canvas.drawCircle(p[0], headY, r, fill);
             fill.setColor(0xFFFFFFFF);
             canvas.drawCircle(p[0], headY, r * 0.4f, fill);
+            if (hasUser && userArrow) drawDestinationPointer(canvas, p, w, h, d);
         }
         if (hasUser) {
             float[] p = toScreen(userLat, userLon, cxw, cyw, w, h);

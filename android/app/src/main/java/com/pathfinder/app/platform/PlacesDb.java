@@ -4,6 +4,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 
 import com.pathfinder.app.core.Place;
+import com.pathfinder.app.core.TzRegions;
 import com.pathfinder.app.core.PlacesSql;
 import com.pathfinder.app.core.Ports;
 
@@ -67,7 +68,11 @@ public final class PlacesDb implements Ports.PlacesIndex {
     private List<Place> read(String sql, String[] args) {
         List<Place> out = new ArrayList<>();
         try (Cursor c = db.rawQuery(sql, args)) {
-            while (c.moveToNext()) out.add(new Place(c.getLong(0), c.getString(1), c.getString(2), c.getDouble(3), c.getDouble(4)));
+            while (c.moveToNext()) {
+                double lat = c.getDouble(3), lon = c.getDouble(4);
+                if (!TzRegions.inTanzania(lat, lon)) continue; // only places on the Tanzania map
+                out.add(new Place(c.getLong(0), c.getString(1), c.getString(2), lat, lon));
+            }
         }
         return out;
     }

@@ -19,6 +19,7 @@ import android.widget.TextView;
 
 import com.pathfinder.app.core.Controller;
 import com.pathfinder.app.core.Place;
+import com.pathfinder.app.core.TzRegions;
 import com.pathfinder.app.core.Strings;
 
 import java.util.List;
@@ -210,7 +211,10 @@ final class SearchPanel extends FrameLayout {
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             row.addView(name);
-            row.addView(Ui.text(ctx, p.kindLabel(), 13, Ui.MUTED, false));
+            String region = TzRegions.regionOf(p.lat, p.lon);
+            String kind = p.kindLabel();
+            String sub = region == null ? kind : (kind.isEmpty() ? region : region + "  \u00b7  " + kind);
+            row.addView(Ui.text(ctx, sub, 13, Ui.MUTED, false));
             row.setClickable(true);
             row.setOnClickListener(v -> {
                 close();

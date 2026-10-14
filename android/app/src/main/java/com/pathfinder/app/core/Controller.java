@@ -285,6 +285,11 @@ public final class Controller {
         return remaining / v;
     }
 
+    /** The user's smoothed speed in m/s (0 when standing still or unknown). */
+    public double speedMs() {
+        return Math.max(0.0, speedAvgMs);
+    }
+
     /** Says the time left, for example when the user taps the time bar. */
     public void speakEta() {
         double eta = etaSeconds();
@@ -370,7 +375,7 @@ public final class Controller {
         }
         io.execute(() -> {
             try {
-                List<Place> found = db.search(query, 20);
+                List<Place> found = db.search(query, 30);
                 main.post(() -> result.ok(found));
             } catch (Exception e) {
                 main.post(() -> result.fail("errUnknown"));

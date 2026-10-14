@@ -555,7 +555,10 @@ public final class MainActivity extends Activity implements Controller.Listener 
         final Controller c = ctl;
         if (c.phase == Controller.Phase.NAVIGATING && c.user != null) {
             // Heading-up: rotate the map by -heading so the way you travel points to the top of the screen.
-            map.setCamera(c.user.lat, c.user.lon, 17.5, headingUp ? (float) -c.heading.doubleValue() : 0f);
+            // zoom out a little as you go faster (17.6 up to 20 km/h, 15.8 at 90 km/h)
+            double speed = c.speedMs();
+            double zoomLevel = speed <= 5.5 ? 17.6 : Math.max(15.8, 17.6 - (speed - 5.5) / 19.5 * 1.8);
+            map.setNavCamera(c.user.lat, c.user.lon, zoomLevel, headingUp ? (float) -c.heading.doubleValue() : 0f);
             wasNavigating = true;
             return;
         }
