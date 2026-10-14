@@ -124,18 +124,30 @@ final class Panels {
         double total = r.distanceM <= 0 ? 1.0 : r.distanceM;
         double remaining = c.progress != null ? c.progress.remainingM : r.distanceM;
         double fraction = c.progress == null ? 0.0 : Math.min(1.0, Math.max(0.0, c.progress.alongM / total));
-        double eta = r.timeS * Math.min(1.0, Math.max(0.0, remaining / total));
         LinearLayout card = Ui.card(ctx);
         ProgressBar bar = new ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
         bar.setMax(1000);
         bar.setProgress((int) Math.round(fraction * 1000));
         card.addView(bar, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout row = Ui.row(ctx);
-        String line = c.rerouting ? t.get("rerouting") : Guidance.formatDuration(t, eta) + "  |  " + Guidance.formatDistance(remaining);
-        row.addView(Ui.text(ctx, line, 17, Ui.TEXT, true), Ui.weight(1));
+        TextView etaText = Ui.text(ctx, etaLine(c), 17, Ui.TEXT, true);
+        etaText.setTag("eta"); // MainActivity refreshes this text every second
+        row.addView(etaText, Ui.weight(1));
         row.addView(Ui.button(ctx, t.get("end"), false, v -> onEnd.run()));
         card.addView(row, wide(ctx, 10));
         return card;
+    }
+
+    /** "12 min 34 s | 5.2 km | Arrive 14:32": time left from the user's own speed. */
+    static String etaLine(Controller c) {
+        Strings t = c.t();
+        if (c.route == null) return "";
+        if (c.rerouting) return t.get("rerouting");
+        double remaining = c.progress != null ? c.progress.remainingM : c.route.distanceM;
+        double eta = c.etaSeconds();
+        String clock = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT)
+                .format(new java.util.Date(System.currentTimeMillis() + Math.round(eta * 1000.0)));
+        return Guidance.formatCountdown(t, eta) + "  |  " + Guidance.formatDistance(remaining) + "  |  " + t.get("arriveAt", "time", clock);
     }
 
     /** Small status chips: offline mode, GPS problems, map-file problems. */

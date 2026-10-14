@@ -62,6 +62,10 @@ public final class Controller {
     public GeoPoint pickup;
     public Place destination;
     public RouteResult route;
+    /** Smoothed speed (m/s) while the user is moving; -1 until we have measured it. */
+    private double speedAvgMs = -1;
+    private long progressAtNs;
+    private static final double MIN_MOVING_MS = 1.0, MAX_SPEED_MS = 70.0;
     public RouteProgress progress;
     public long calcMillis = -1;
     public boolean rerouting;
@@ -260,6 +264,24 @@ public final class Controller {
 
     // ---- GPS ----
 
+    /**
+     * Seconds until arrival = distance left / the user's own speed.
+     * Before we have measured the speed we use the route's planned average speed.
+     * Between GPS fixes the distance left shrinks at the same speed, so the time can be read every second.
+     */
+    public double etaSeconds() {
+        RouteResult r = route;
+        if (r == null) return Double.NaN;
+        double remaining = progress != null ? progress.remainingM : r.distanceM;
+        double planned = r.timeS > 0 && r.distanceM > 0 ? r.distanceM / r.timeS : 10.0;
+        double v = Math.max(speedAvgMs > 0 ? speedAvgMs : planned, 1.0);
+        if (progress != null && speedAvgMs > 0) {
+            double since = Math.min(3.0, (System.nanoTime() - progressAtNs) / 1e9); // stop guessing if GPS is lost
+            remaining = Math.max(0.0, remaining - v * since);
+        }
+        return remaining / v;
+    }
+
     public void setLocationState(LocationState s) {
         locationState = s;
         changed();
@@ -268,6 +290,10 @@ public final class Controller {
     public void onFix(Fix f) {
         if (!GeoPoint.valid(f.lat, f.lon)) return;
         user = new GeoPoint(f.lat, f.lon);
+        if (f.speedMs >= MIN_MOVING_MS && f.speedMs <= MAX_SPEED_MS && f.accuracyM <= MAX_ACCURACY_M) {
+            // about the last 10 seconds of driving: smooth, but follows traffic
+            speedAvgMs = speedAvgMs < 0 ? f.speedMs : speedAvgMs * 0.9 + f.speedMs * 0.1;
+        }
         if (f.speedMs > 1.0f && f.hasBearing && !Float.isNaN(f.bearingDeg)) gpsHeading = (double) f.bearingDeg; // only meaningful while moving
         if (phase == Phase.NAVIGATING) {
             if (progress == null && gpsHeading != null) heading = Heading.smooth(heading, gpsHeading, 0.3);
@@ -468,6 +494,7 @@ public final class Controller {
         if (route == null) return;
         offCount = 0;
         progress = null;
+        speedAvgMs = -1;
         heading = gpsHeading;
         phase = Phase.NAVIGATING;
         speak(t().get("vNavStart"));
@@ -484,6 +511,7 @@ public final class Controller {
                 progressBusy = false;
                 if (phase != Phase.NAVIGATING || route != r) return;
                 progress = pr;
+                progressAtNs = System.nanoTime();
                 // heading: the road direction while on the route, otherwise the GPS direction
                 Double target = pr.offRouteM < 30 ? Double.valueOf(pr.bearingDeg) : gpsHeading;
                 if (target != null) heading = Heading.smooth(heading, target, 0.3);

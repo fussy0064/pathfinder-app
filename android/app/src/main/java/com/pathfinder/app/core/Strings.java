@@ -86,6 +86,9 @@ public final class Strings {
         EN.put("downloadProgress", "{file}  {done} of {total}");
         EN.put("settings", "Settings");
         EN.put("language", "Language");
+        EN.put("minSec", "{m} min {s} s");
+        EN.put("secOnly", "{s} s");
+        EN.put("arriveAt", "Arrive {time}");
         EN.put("keyNotSaved", "Key not saved. Paste only the key, with no spaces.");
         EN.put("voiceSearch", "Speak");
         EN.put("voicePrompt", "Say where you want to go");
@@ -219,6 +222,9 @@ public final class Strings {
         SW.put("downloadProgress", "{file}  {done} kati ya {total}");
         SW.put("settings", "Mipangilio");
         SW.put("language", "Lugha");
+        SW.put("minSec", "dk {m} s {s}");
+        SW.put("secOnly", "s {s}");
+        SW.put("arriveAt", "Kufika {time}");
         SW.put("keyNotSaved", "Ufunguo haujahifadhiwa. Bandika ufunguo tu, bila nafasi.");
         SW.put("voiceSearch", "Sema");
         SW.put("voicePrompt", "Sema unakotaka kwenda wapi");

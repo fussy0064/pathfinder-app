@@ -56,6 +56,15 @@ public final class Guidance {
         return String.format(Locale.ROOT, "%.1f km", m / 1000.0);
     }
 
+    /** Countdown that changes every second: "12 min 34 s"; over an hour "1 h 05 min". */
+    public static String formatCountdown(Strings t, double seconds) {
+        if (Double.isNaN(seconds) || Double.isInfinite(seconds) || seconds < 0) return "-";
+        long s = Math.round(seconds);
+        if (s >= 3600) return formatDuration(t, seconds);
+        if (s >= 60) return t.get("minSec", "m", Long.toString(s / 60), "s", String.format(Locale.ROOT, "%02d", s % 60));
+        return t.get("secOnly", "s", Long.toString(s));
+    }
+
     public static String formatDuration(Strings t, double seconds) {
         if (Double.isNaN(seconds) || seconds < 0) return "-";
         long min = Math.round(seconds / 60.0);

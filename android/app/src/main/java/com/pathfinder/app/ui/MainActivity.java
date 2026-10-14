@@ -68,6 +68,15 @@ public final class MainActivity extends Activity implements Controller.Listener 
     private long movedAt;
     private String street, pickupName;
     private int streetReq;
+    private final Runnable etaTick = new Runnable() {
+        @Override public void run() {
+            if (ctl.phase == Controller.Phase.NAVIGATING) {
+                View v = bottomHost.findViewWithTag("eta");
+                if (v instanceof TextView) ((TextView) v).setText(Panels.etaLine(ctl));
+            }
+            ui.postDelayed(this, 1000);
+        }
+    };
     private final Runnable pickTick = new Runnable() {
         @Override public void run() {
             if (pickMode == PICK_NONE) return;
@@ -256,6 +265,14 @@ public final class MainActivity extends Activity implements Controller.Listener 
     protected void onResume() {
         super.onResume();
         if (location.hasPermission()) location.start();
+        ui.removeCallbacks(etaTick);
+        ui.postDelayed(etaTick, 1000); // arrival time refreshes every second while navigating
+    }
+
+    @Override
+    protected void onPause() {
+        ui.removeCallbacks(etaTick);
+        super.onPause();
     }
 
     /** Phone switched between light and dark: rebuild the screen (after navigation ends, so a trip is never reset). */
@@ -273,6 +290,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
     @Override
     protected void onDestroy() {
         ui.removeCallbacks(pickTick);
+        ui.removeCallbacks(etaTick);
         streetIo.shutdownNow();
         location.stop();
         ctl.removeListener(this);
