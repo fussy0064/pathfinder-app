@@ -2,7 +2,10 @@ package com.pathfinder.app.platform;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
@@ -23,6 +26,14 @@ public final class LocationSource implements LocationListener {
     private final LocationManager manager;
     private final Controller controller;
     private boolean running;
+    private boolean receiverOn;
+    /** The user switched Location on or off while the app is open: start (or restart) the search at once. */
+    private final BroadcastReceiver modeReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            if (running) restartSearch();
+        }
+    };
     private long lastGpsMs = -100000;
     private static final long STALE_MS = 6 * 3600 * 1000L; // a position from the last 6 hours is shown at once
 
@@ -66,14 +77,14 @@ public final class LocationSource implements LocationListener {
     @SuppressLint("MissingPermission")
     private void listen(String provider) {
         try {
-            if (isOn(provider)) manager.requestLocationUpdates(provider, 1000L, 0f, this, Looper.getMainLooper());
+            // also for a provider that is OFF now: Android calls us as soon as the user switches it on
+            manager.requestLocationUpdates(provider, 1000L, 0f, this, Looper.getMainLooper());
         } catch (RuntimeException ignored) {
             // provider not on this phone: skip it, the others still work
         }
     }
 
     public void start() {
-        if (running) return;
         if (!hasPermission()) {
             controller.setLocationState(Controller.LocationState.DENIED);
             return;
@@ -82,11 +93,30 @@ public final class LocationSource implements LocationListener {
             controller.setLocationState(Controller.LocationState.SERVICE_OFF);
             return;
         }
+        if (running) { // called again (app back on screen): make sure every provider is registered, even if GPS was off before
+            restartSearch();
+            return;
+        }
+        running = true;
+        if (!receiverOn) {
+            try {
+                IntentFilter f = new IntentFilter(LocationManager.MODE_CHANGED_ACTION);
+                f.addAction(LocationManager.PROVIDERS_CHANGED_ACTION);
+                context.registerReceiver(modeReceiver, f);
+                receiverOn = true;
+            } catch (RuntimeException ignored) {
+                // the provider callbacks below still work
+            }
+        }
+        restartSearch();
+    }
+
+    /** Safe to call many times: re-registers all providers, refreshes the state, shows the last position, asks for a fresh fix. */
+    private void restartSearch() {
         if (fine()) listen(LocationManager.GPS_PROVIDER);
         for (String name : fastProviders()) listen(name);
         if (fine()) helpGpsColdStart();
-        running = true;
-        refreshState(); // keep listening even when off: the user may switch location on
+        refreshState();
         pushLastKnown();
         requestQuickFix();
     }
@@ -146,6 +176,14 @@ public final class LocationSource implements LocationListener {
     public void stop() {
         if (!running) return;
         manager.removeUpdates(this);
+        if (receiverOn) {
+            try {
+                context.unregisterReceiver(modeReceiver);
+            } catch (RuntimeException ignored) {
+                // already removed
+            }
+            receiverOn = false;
+        }
         running = false;
     }
 
@@ -159,7 +197,7 @@ public final class LocationSource implements LocationListener {
 
     @Override
     public void onProviderEnabled(String provider) {
-        refreshState();
+        if (running) restartSearch(); // GPS or Wi-Fi location was just switched on: find the position now
     }
 
     @Override
