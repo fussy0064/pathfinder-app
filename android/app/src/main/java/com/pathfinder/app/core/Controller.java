@@ -58,6 +58,8 @@ public final class Controller {
     public Ports.PlacesIndex places;
     public LocationState locationState = LocationState.UNKNOWN;
     public GeoPoint user;
+    /** True when the map tiles come from the internet (online build), so "no map tiles" must not be shown. */
+    public boolean onlineTiles;
     /** Start of the route when the user picked another pickup point; null = my location. */
     public GeoPoint pickup;
     public Place destination;

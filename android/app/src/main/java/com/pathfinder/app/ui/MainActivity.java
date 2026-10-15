@@ -58,6 +58,8 @@ public final class MainActivity extends Activity implements Controller.Listener 
     // ---- pin editing (destination pin / pickup point) ----
     private static final int PICK_NONE = 0, PICK_DEST = 1, PICK_PICKUP = 2;
     private int pickMode = PICK_NONE;
+    private boolean navFree; // navigating, but the user is looking around the map
+    private long navFreeAt;
     private PinView pin;
     private FrameLayout pickHost;
     private TextView pickTitle, pickStreet, pickCoords;
@@ -70,6 +72,10 @@ public final class MainActivity extends Activity implements Controller.Listener 
     private int streetReq;
     private final Runnable etaTick = new Runnable() {
         @Override public void run() {
+            if (navFree && SystemClock.uptimeMillis() - navFreeAt > 15000) { // 15 seconds without touching the map: follow the user again
+                navFree = false;
+                render();
+            }
             if (ctl.phase == Controller.Phase.NAVIGATING) {
                 View v = bottomHost.findViewWithTag("eta");
                 if (v instanceof TextView) ((TextView) v).setText(Panels.etaLine(ctl));
@@ -133,6 +139,14 @@ public final class MainActivity extends Activity implements Controller.Listener 
         root.setBackgroundColor(Ui.BG);
         map = new MapView(this);
         root.addView(map, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        map.setOnUserMove(() -> { // during navigation: the user moved the map, so stop following until Recenter (or 15 seconds)
+            if (ctl.phase != Controller.Phase.NAVIGATING) return;
+            navFreeAt = SystemClock.uptimeMillis();
+            if (!navFree) {
+                navFree = true;
+                render();
+            }
+        });
         map.setListener((lat, lon) -> {
             if (pickMode != PICK_NONE) return;
             if (ctl.phase == Controller.Phase.IDLE || ctl.phase == Controller.Phase.ROUTE_FAILED || ctl.phase == Controller.Phase.ROUTE_READY) {
@@ -329,6 +343,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
 
     private void reopenTiles() {
         if (tiles != null) tiles.close();
+        ctl.onlineTiles = false;
         tiles = null;
         tilesProblemKey = null;
         if (ctl.data != null && ctl.data.hasTiles) {
@@ -341,6 +356,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
             String tileKey = tileKey();
             // online build only: no local tiles, so download them (MapTiler if a key was set at build time, else OpenStreetMap)
             tiles = new OnlineTileStore(new java.io.File(getCacheDir(), tileKey.isEmpty() ? "tiles" : "tiles_mt"), tileKey);
+            ctl.onlineTiles = true;
         }
         map.setTiles(tiles);
         centeredOnData = false;
@@ -362,8 +378,9 @@ public final class MainActivity extends Activity implements Controller.Listener 
         boolean up = c.prefs().headingUp() && c.heading != null;
         map.setUser(c.user != null, c.user == null ? 0 : c.user.lat, c.user == null ? 0 : c.user.lon,
                 c.heading == null ? 0f : c.heading.floatValue(), navigating);
-        map.setInteractive(!navigating);
-        if (pickMode == PICK_NONE) updateCamera(up);
+        map.setInteractive(true); // the map can be moved in all directions, also while navigating
+        if (!navigating) navFree = false;
+        if (pickMode == PICK_NONE && !(navigating && navFree)) updateCamera(up);
         if (navigating) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -410,6 +427,13 @@ public final class MainActivity extends Activity implements Controller.Listener 
             fabColumn.addView(Ui.spacer(this, 8));
             fabColumn.addView(Icons.roundButton(this, c.prefs().headingUp() ? Icons.Kind.DIRECTION_UP : Icons.Kind.NORTH_UP, Ui.TEXT, Ui.SURFACE,
                     c.prefs().headingUp() ? t.get("headingUpTip") : t.get("northUpTip"), v -> c.setHeadingUp(!c.prefs().headingUp())));
+            if (navFree) {
+                fabColumn.addView(Ui.spacer(this, 8));
+                fabColumn.addView(Ui.button(this, t.get("recenter"), true, v -> {
+                    navFree = false;
+                    render();
+                }));
+            }
         } else if (c.user != null) {
             fabColumn.addView(Icons.roundButton(this, Icons.Kind.LOCATE, Ui.TEXT, Ui.SURFACE, t.get("myLocation"),
                     v -> map.setCamera(c.user.lat, c.user.lon, 17, 0)));

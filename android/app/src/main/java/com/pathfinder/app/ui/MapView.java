@@ -145,6 +145,11 @@ final class MapView extends View {
 
     void setInteractive(boolean on) { interactive = on; }
 
+    private Runnable userMoved;
+
+    /** Called when the user drags or zooms the map with a finger (not when the app moves the camera). */
+    void setOnUserMove(Runnable r) { userMoved = r; }
+
     void setTiles(TileSource store) {
         tiles = store;
         cache.evictAll();
@@ -290,12 +295,16 @@ final class MapView extends View {
 
     private void zoomBy(double delta) {
         if (!interactive) return;
+        if (camAnim != null) camAnim.cancel();
+        if (userMoved != null) userMoved.run();
         zoom = clampZoom(zoom + delta);
         invalidate();
     }
 
     private void moveByScreen(float dx, float dy) {
         if (!interactive) return;
+        if (camAnim != null) camAnim.cancel();
+        if (userMoved != null) userMoved.run();
         double rad = Math.toRadians(-rotation);
         double wx = dx * Math.cos(rad) - dy * Math.sin(rad), wy = dx * Math.sin(rad) + dy * Math.cos(rad);
         double cx = Mercator.x(centerLon, zoom) + wx, cy = Mercator.y(centerLat, zoom) + wy;

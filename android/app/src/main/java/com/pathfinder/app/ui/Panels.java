@@ -167,7 +167,7 @@ final class Panels {
             default: break;
         }
         if (tilesProblemKey != null) row.addView(chip(ctx, t.get(tilesProblemKey), null));
-        else if (c.data != null && !c.data.hasTiles) row.addView(chip(ctx, t.get("noTiles"), null));
+        else if (c.data != null && !c.data.hasTiles && !c.onlineTiles) row.addView(chip(ctx, t.get("noTiles"), null));
         if (voiceMissing) row.addView(chip(ctx, t.get("voiceMissingShort", "lang", c.prefs().lang().displayName), null));
         return scroll;
     }
