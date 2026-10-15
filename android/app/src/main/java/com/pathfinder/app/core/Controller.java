@@ -353,8 +353,8 @@ public final class Controller {
         user = new GeoPoint(f.lat, f.lon);
         double v = measuredSpeed(f);
         if (v >= MIN_MOVING_MS && v <= MAX_SPEED_MS) {
-            // about the last 5-10 seconds: smooth, but follows traffic and walking
-            speedAvgMs = speedAvgMs < 0 ? v : speedAvgMs * 0.8 + v * 0.2;
+            // about the last 2-3 seconds: the time left reacts quickly when the user speeds up or slows down
+            speedAvgMs = speedAvgMs < 0 ? v : speedAvgMs * 0.5 + v * 0.5;
         }
         if (f.speedMs > 1.0f && f.hasBearing && !Float.isNaN(f.bearingDeg)) gpsHeading = (double) f.bearingDeg; // only meaningful while moving
         if (phase == Phase.NAVIGATING) {
