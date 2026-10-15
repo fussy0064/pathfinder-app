@@ -17,7 +17,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
 /**
- * Keeps one secret (the DeepSeek API key) encrypted with an AES-GCM key that lives in the Android Keystore.
+ * Keeps one secret (the Gemini API key) encrypted with an AES-GCM key that lives in the Android Keystore.
  * The key never leaves the Keystore; the encrypted text is stored in private app preferences.
  */
 final class SecretStore {

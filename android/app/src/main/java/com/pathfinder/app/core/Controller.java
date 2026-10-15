@@ -384,7 +384,7 @@ public final class Controller {
     }
 
     /**
-     * AI search: DeepSeek turns the typed words into place kinds / names; the offline database finds the places.
+     * AI search: Gemini turns the typed words into place kinds / names; the offline database finds the places.
      * Only the typed words leave the phone.
      */
     public void aiSearch(String text, Result<List<Place>> result) {

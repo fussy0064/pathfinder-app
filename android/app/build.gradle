@@ -26,7 +26,7 @@ android {
 
     // Two builds of the same app:
     //   offline = no INTERNET permission at all (routing, search, voice, maps work; no AI search, no downloads)
-    //   online  = adds INTERNET, for DeepSeek AI search and the in-app map downloader
+    //   online  = adds INTERNET, for Gemini AI search and the in-app map downloader
     // Optional download server:  ./gradlew installOnlineDebug -PpackBaseUrl=https://your-server/packs/
     flavorDimensions 'network'
     productFlavors {

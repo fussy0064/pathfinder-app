@@ -20,7 +20,7 @@ import com.pathfinder.app.core.Controller;
 import com.pathfinder.app.core.Lang;
 import com.pathfinder.app.core.Strings;
 
-/** Language, voice guidance, map rotation and the optional DeepSeek AI assistant. Full screen. */
+/** Language, voice guidance, map rotation and the optional Gemini AI assistant. Full screen. */
 final class SettingsPanel extends FrameLayout {
     private final Controller c;
     private final TextView title, languageLabel, themeLabel, voiceWarning, privacy, offlineNote;

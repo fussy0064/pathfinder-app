@@ -23,7 +23,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.pathfinder.app.core.Controller;
-import com.pathfinder.app.core.DeepSeekClient;
+import com.pathfinder.app.core.GeminiClient;
 import com.pathfinder.app.core.GeoPoint;
 import com.pathfinder.app.core.Place;
 import com.pathfinder.app.core.Strings;
@@ -125,7 +125,7 @@ public final class MainActivity extends Activity implements Controller.Listener 
         voice = new AndroidVoice(this, () -> {
             if (ctl != null) ctl.refreshVoice();
         });
-        ctl = new Controller(new MainThreadHandler(), new AndroidPrefs(this), voice, PlacesDb::open, new DeepSeekClient(),
+        ctl = new Controller(new MainThreadHandler(), new AndroidPrefs(this), voice, PlacesDb::open, new GeminiClient(),
                 new File(base, "pathfinder"), packBaseUrl());
         location = new LocationSource(this, ctl);
 

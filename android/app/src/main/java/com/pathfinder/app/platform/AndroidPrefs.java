@@ -17,6 +17,10 @@ public final class AndroidPrefs implements Ports.Prefs {
     public AndroidPrefs(Context context) {
         prefs = context.getSharedPreferences("pathfinder_settings", Context.MODE_PRIVATE);
         secret = new SecretStore(context);
+        if (!"gemini".equals(prefs.getString("ai_provider", null))) {
+            secret.clear(); // a key saved for DeepSeek must never be sent to Google
+            prefs.edit().putString("ai_provider", "gemini").putBoolean("ai_on", false).apply();
+        }
     }
 
     @Override public Lang lang() {
